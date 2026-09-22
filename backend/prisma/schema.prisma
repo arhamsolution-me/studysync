@@ -1,0 +1,300 @@
+// Prisma schema for StudySync AI
+// PostgreSQL database with full relational integrity
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────
+
+enum UserRole {
+  student
+  admin
+}
+
+enum UserPlan {
+  free
+  pro
+  campus
+}
+
+enum AiProviderPreference {
+  system
+  byok
+}
+
+enum ApiKeyProvider {
+  gemini
+  openai
+  groq
+}
+
+enum TaskType {
+  quiz
+  assignment
+  project
+  exam
+  personal
+  other
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum TaskStatus {
+  pending
+  done
+  missed
+}
+
+enum TaskSource {
+  voice
+  email
+  manual
+}
+
+enum ReminderChannel {
+  email
+  whatsapp
+}
+
+enum ReminderStatus {
+  pending
+  sent
+  failed
+}
+
+enum PrioritySource {
+  user_set
+  ai_suggested
+}
+
+// ─── Models ─────────────────────────────────────────────
+
+model User {
+  id                     String               @id @default(uuid()) @db.Uuid
+  fullName               String               @map("full_name")
+  email                  String               @unique
+  passwordHash           String?              @map("password_hash")
+  googleOauthId          String?              @map("google_oauth_id")
+  gmailRefreshTokenEnc   String?              @map("gmail_refresh_token_enc")
+  whatsappNumber         String?              @map("whatsapp_number")
+  totpSecretEnc          String?              @map("totp_secret_enc")
+  role                   UserRole             @default(student)
+  reminderLeadTimeMins   Int                  @default(1440) @map("reminder_lead_time_mins")
+  refreshToken           String?              @map("refresh_token")
+  
+  // Academic Profile & SaaS Fields
+  avatarUrl              String?              @map("avatar_url")
+  university             String?
+  major                  String?
+  semester               String?
+  isOnboarded            Boolean              @default(false) @map("is_onboarded")
+  plan                   UserPlan             @default(free)
+  aiProviderPreference   AiProviderPreference @default(system) @map("ai_provider_preference")
+  activeByokProvider     ApiKeyProvider?      @map("active_byok_provider")
+
+  // Authentication & Verification
+  isVerified             Boolean              @default(false) @map("is_verified")
+  otpCode                String?              @map("otp_code")
+  otpExpiresAt           DateTime?            @map("otp_expires_at")
+
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+
+  tasks              Task[]
+  courses            Course[]
+  apiKeys            UserApiKey[]
+  subscriptions      Subscription[]
+  chatMessages       ChatMessage[]
+  passwordResets     PasswordReset[]
+  priorityRerankLogs PriorityRerankLog[]
+  emailIngestionLogs EmailIngestionLog[]
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model UserApiKey {
+  id            String         @id @default(uuid()) @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  provider      ApiKeyProvider
+  encryptedData String         @map("encrypted_data")
+  iv            String
+  authTag       String         @map("auth_tag")
+  maskedKey     String         @map("masked_key")
+  isValid       Boolean        @default(true) @map("is_valid")
+  lastTestedAt  DateTime?      @map("last_tested_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("user_api_keys")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid()) @db.Uuid
+  userId               String    @map("user_id") @db.Uuid
+  plan                 UserPlan  @default(free)
+  status               String    @default("active")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Task {
+  id                  String          @id @default(uuid()) @db.Uuid
+  userId              String          @map("user_id") @db.Uuid
+  courseId            String?         @map("course_id") @db.Uuid
+  title               String
+  type                TaskType
+  subject             String?
+  description         String?
+  deadline            DateTime        @db.Timestamptz()
+  priority            TaskPriority
+  prioritySource      PrioritySource  @default(user_set) @map("priority_source")
+  priorityLastUpdated DateTime?       @map("priority_last_updated") @db.Timestamptz()
+  status              TaskStatus      @default(pending)
+  source              TaskSource
+  confirmed           Boolean         @default(true)
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course?    @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  reminders Reminder[]
+
+  @@index([userId, deadline])
+  @@map("tasks")
+}
+
+model Reminder {
+  id               String         @id @default(uuid()) @db.Uuid
+  taskId           String         @map("task_id") @db.Uuid
+  channel          ReminderChannel
+  scheduledFor     DateTime       @map("scheduled_for") @db.Timestamptz()
+  sentAt           DateTime?      @map("sent_at") @db.Timestamptz()
+  status           ReminderStatus @default(pending)
+  generatedMessage String?        @map("generated_message")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledFor, status])
+  @@map("reminders")
+}
+
+model Course {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  colorTag  String?  @map("color_tag")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks        Task[]
+  materials    CourseMaterial[]
+  chatMessages ChatMessage[]
+
+  @@map("courses")
+}
+
+model CourseMaterial {
+  id         String   @id @default(uuid()) @db.Uuid
+  courseId   String   @map("course_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  title      String
+  content    String
+  sourceType String   @default("document") @map("source_type")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("course_materials")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  courseId  String   @map("course_id") @db.Uuid
+  role      String   @default("user")
+  text      String
+  imageUrl  String?  @map("image_url")
+  sources   Json?
+  widgets   Json?
+  toolCalls Json?    @map("tool_calls")
+  thought   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([userId, courseId, createdAt])
+  @@map("chat_messages")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  email     String
+  otpCode   String   @map("otp_code")
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, otpCode])
+  @@map("password_resets")
+}
+
+model EmailIngestionLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  gmailMessageId  String   @map("gmail_message_id")
+  processedAt     DateTime @default(now()) @map("processed_at")
+  extractedTaskId String?  @map("extracted_task_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gmailMessageId])
+  @@map("email_ingestion_log")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  action    String
+  metadata  Json?
+  ipAddress String   @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_log")
+}
+
+model PriorityRerankLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  ranAt       DateTime @default(now()) @map("ran_at") @db.Timestamptz()
+  summaryNote String   @map("summary_note")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("priority_rerank_log")
+}
