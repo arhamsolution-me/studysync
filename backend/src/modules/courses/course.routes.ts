@@ -531,7 +531,8 @@ router.get('/:id/workspace-file', async (req: AuthRequest, res: Response, next: 
       return;
     }
 
-    const { getCourseWorkspaceDir } = await import('../ai/tools/file.tools');
+    const fileToolsMod: any = await import('../ai/tools/file.tools').catch(() => ({}));
+    const getCourseWorkspaceDir = fileToolsMod.getCourseWorkspaceDir || ((id: string) => `storage/courses/${id}`);
     const pathMod = await import('path');
     const fsMod = await import('fs');
 
