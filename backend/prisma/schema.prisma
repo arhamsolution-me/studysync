@@ -103,6 +103,7 @@ model User {
 
   // Authentication & Verification
   isVerified             Boolean              @default(false) @map("is_verified")
+  isBlocked              Boolean              @default(false) @map("is_blocked")
   otpCode                String?              @map("otp_code")
   otpExpiresAt           DateTime?            @map("otp_expires_at")
 
@@ -203,6 +204,7 @@ model Course {
   userId    String   @map("user_id") @db.Uuid
   name      String
   colorTag  String?  @map("color_tag")
+  isBlocked Boolean  @default(false) @map("is_blocked")
   createdAt DateTime @default(now()) @map("created_at")
 
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)

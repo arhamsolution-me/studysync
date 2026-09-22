@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authGuard, AuthRequest } from '../../middleware/authGuard';
+import prisma from '../../config/database';
 import { courseService } from './course.service';
 import {
   extractTextFromBuffer,
@@ -81,6 +82,14 @@ router.get('/:id/tasks', async (req: AuthRequest, res: Response, next: NextFunct
 router.post('/:id/materials', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const courseId = req.params.id as string;
+    const courseRecord = await prisma.course.findUnique({ where: { id: courseId } });
+    if ((courseRecord as any)?.isBlocked) {
+      res.status(403).json({
+        success: false,
+        message: 'This course has been suspended by the administrator. Please contact support.',
+      });
+      return;
+    }
     const { title, content, sourceType } = req.body;
 
     if (!content || typeof content !== 'string') {
@@ -112,6 +121,14 @@ router.post('/:id/materials', async (req: AuthRequest, res: Response, next: Next
 router.post('/:id/upload', uploadDocument.any(), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const courseId = req.params.id as string;
+    const courseRecord = await prisma.course.findUnique({ where: { id: courseId } });
+    if ((courseRecord as any)?.isBlocked) {
+      res.status(403).json({
+        success: false,
+        message: 'This course has been suspended by the administrator. Please contact support.',
+      });
+      return;
+    }
     const rawFiles: Express.Multer.File[] =
       (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
     const seenUploads = new Set<string>();
@@ -310,6 +327,14 @@ router.post('/:id/upload', uploadDocument.any(), async (req: AuthRequest, res: R
 router.post('/:id/chat', uploadDocument.any(), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const courseId = req.params.id as string;
+    const courseRecord = await prisma.course.findUnique({ where: { id: courseId } });
+    if ((courseRecord as any)?.isBlocked) {
+      res.status(403).json({
+        success: false,
+        message: 'This course has been suspended by the administrator. Please contact support.',
+      });
+      return;
+    }
     let question = (req.body.question || '').trim();
     const enableThink = req.body.think === true || req.body.think === 'true' || req.body.enableThink === true;
 

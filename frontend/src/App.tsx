@@ -20,6 +20,7 @@ import Courses from './pages/Courses';
 import Chatbot from './pages/Chatbot';
 import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
+import AdminPortal from './pages/AdminPortal';
 import Layout from './components/Layout';
 import LogoFillLoader from './components/LogoFillLoader';
 
@@ -118,6 +119,38 @@ function PublicAuthRoute({
     if (user.isOnboarded === false) {
       return <Navigate to="/onboarding" replace />;
     }
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+// Admin Route Guard: Requires authenticated user with role === 'admin'
+function AdminRoute({
+  user,
+  authChecking,
+  children,
+}: {
+  user: User | null;
+  authChecking: boolean;
+  children: React.ReactNode;
+}) {
+  if (authChecking) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0F172A', color: '#94A3B8' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: '36px', height: '36px', border: '3px solid rgba(99,102,241,0.2)', borderTopColor: '#6366F1', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: '0.875rem' }}>Verifying admin authorization...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -251,6 +284,14 @@ function App() {
                   onUpdateUser={(updated) => setUser((prev) => (prev ? { ...prev, ...updated } : null))}
                   onLogout={handleLogout}
                 />
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute user={user} authChecking={authChecking}>
+                  <AdminPortal user={user!} />
+                </AdminRoute>
               }
             />
           </Route>

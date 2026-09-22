@@ -81,6 +81,43 @@ export const supabaseRepo: any = {
       }
       return toCamelCase(updated);
     },
+
+    findMany: async ({ where, orderBy, take, skip }: any = {}) => {
+      try {
+        let query = supabase.from('users').select('*');
+        if (where?.role) query = query.eq('role', where.role);
+        if (where?.plan) query = query.eq('plan', where.plan);
+        if (orderBy?.createdAt === 'desc') {
+          query = query.order('created_at', { ascending: false });
+        } else {
+          query = query.order('created_at', { ascending: true });
+        }
+        if (typeof skip === 'number' && typeof take === 'number') {
+          query = query.range(skip, skip + take - 1);
+        } else if (typeof take === 'number') {
+          query = query.limit(take);
+        }
+        const { data, error } = await query;
+        if (error || !data) return [];
+        return data.map(toCamelCase);
+      } catch (err) {
+        console.error('[SupabaseRepo] user.findMany error:', err);
+        return [];
+      }
+    },
+
+    count: async ({ where }: any = {}) => {
+      try {
+        let query = supabase.from('users').select('*', { count: 'exact', head: true });
+        if (where?.role) query = query.eq('role', where.role);
+        if (where?.plan) query = query.eq('plan', where.plan);
+        const { count, error } = await query;
+        if (error) return 0;
+        return count || 0;
+      } catch {
+        return 0;
+      }
+    },
   },
 
   course: {
@@ -165,6 +202,36 @@ export const supabaseRepo: any = {
         throw new Error(`Failed to delete course in Supabase: ${error.message}`);
       }
       return data ? toCamelCase(data) : null;
+    },
+
+    update: async ({ where, data }: { where: { id: string }; data: any }) => {
+      const payload = toSnakeCase({
+        ...data,
+        updatedAt: new Date().toISOString(),
+      });
+      const { data: updated, error } = await supabase
+        .from('courses')
+        .update(payload)
+        .eq('id', where.id)
+        .select('*')
+        .single();
+      if (error) {
+        console.error('[SupabaseRepo] course.update error:', error);
+        throw new Error(`Failed to update course in Supabase: ${error.message}`);
+      }
+      return toCamelCase(updated);
+    },
+
+    count: async ({ where }: any = {}) => {
+      try {
+        let query = supabase.from('courses').select('*', { count: 'exact', head: true });
+        if (where?.userId) query = query.eq('user_id', where.userId);
+        const { count, error } = await query;
+        if (error) return 0;
+        return count || 0;
+      } catch {
+        return 0;
+      }
     },
   },
 

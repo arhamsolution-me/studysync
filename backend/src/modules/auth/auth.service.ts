@@ -199,6 +199,14 @@ class AuthService {
       );
     }
 
+    // Check account suspension status
+    if ((user as any).isBlocked) {
+      throw Object.assign(
+        new Error('Your account has been suspended by the administrator. Please contact support.'),
+        { statusCode: 403 }
+      );
+    }
+
     // Check verification status
     if (user.isVerified === false) {
       const otpCode = generate6DigitOtp();

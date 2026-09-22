@@ -642,6 +642,14 @@ a:hover {
   box-sizing: border-box;
 }
 
+.page-container-admin {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box;
+}
+
 .page-container.page-container-chatbot,
 .page-container:has(.chatbot-fullpage) {
   max-width: 100% !important;

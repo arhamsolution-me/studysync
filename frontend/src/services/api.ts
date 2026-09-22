@@ -228,4 +228,21 @@ export const whatsappApi = {
     api.post('/whatsapp/send-test', { phoneNumber, message }),
 };
 
+// ─── Admin Portal API ──────────────────────────────────────────────────
+
+export const adminApi = {
+  getOverview: () => api.get('/admin/overview'),
+  getUsers: (params?: { search?: string; plan?: string; status?: string; page?: number; limit?: number }) =>
+    api.get('/admin/users', { params }),
+  updateUserPlan: (userId: string, plan: 'free' | 'pro' | 'campus') =>
+    api.patch(`/admin/users/${userId}/plan`, { plan }),
+  updateUserStatus: (userId: string, isBlocked: boolean) =>
+    api.patch(`/admin/users/${userId}/status`, { isBlocked }),
+  getCourses: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
+    api.get('/admin/courses', { params }),
+  updateCourseStatus: (courseId: string, isBlocked: boolean) =>
+    api.patch(`/admin/courses/${courseId}/status`, { isBlocked }),
+  getAiUsage: () => api.get('/admin/ai-usage'),
+};
+
 export default api;

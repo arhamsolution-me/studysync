@@ -13,6 +13,7 @@ import notificationRoutes from './modules/notifications/notification.routes';
 import courseRoutes from './modules/courses/course.routes';
 import whatsappRoutes from './modules/whatsapp/whatsapp.routes';
 import apiKeyRoutes from './modules/auth/apiKey.routes';
+import adminRoutes from './modules/admin/admin.routes';
 import { whatsAppService } from './modules/whatsapp/whatsapp.service';
 import {
   startStandaloneReminderEngine,
@@ -97,6 +98,9 @@ app.use('/whatsapp', whatsappRoutes);
 
 app.use('/api/user/keys', apiKeyRoutes);
 app.use('/user/keys', apiKeyRoutes);
+
+app.use('/api/admin', adminRoutes);
+app.use('/admin', adminRoutes);
 
 // ─── 404 Handler ──────────────────────────────────────────────────────
 

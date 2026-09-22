@@ -5,22 +5,24 @@ import {
   GraduationCap,
   Bot,
   Settings,
+  ShieldCheck,
   LogOut,
 } from 'lucide-react';
 import { authApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface LayoutProps {
-  user: { fullName: string; email: string };
+  user: { fullName: string; email: string; role?: string };
   onLogout: () => void;
 }
 
-export default function Layout({ user: _user, onLogout }: LayoutProps) {
+export default function Layout({ user, onLogout }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isChatbotPage = location.pathname.startsWith('/chatbot');
   const isCoursesPage = location.pathname.startsWith('/my-courses');
   const isDashboardPage = location.pathname === '/dashboard' || location.pathname === '/' || location.pathname === '';
+  const isAdminPage = location.pathname.startsWith('/admin');
 
   const handleLogout = async () => {
     try {
@@ -113,6 +115,36 @@ export default function Layout({ user: _user, onLogout }: LayoutProps) {
             </NavLink>
           </div>
 
+          {user?.role === 'admin' && (
+            <div className="sidebar-nav-section">
+              <div className="sidebar-nav-label" style={{ color: '#F59E0B' }}>Governance</div>
+              <NavLink
+                to="/admin"
+                className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+                title="Admin Portal"
+              >
+                <div className="sidebar-nav-icon-wrap" style={{ color: '#F59E0B' }}>
+                  <ShieldCheck size={19} />
+                </div>
+                <span className="sidebar-nav-title" style={{ fontWeight: 600 }}>Admin Portal</span>
+                <span style={{
+                  marginLeft: 'auto',
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25))',
+                  color: '#F59E0B',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  padding: '2px 7px',
+                  borderRadius: '9999px',
+                  letterSpacing: '0.05em'
+                }}>
+                  Admin
+                </span>
+              </NavLink>
+            </div>
+          )}
+
           <div className="sidebar-logout-item">
             <button
               type="button"
@@ -133,7 +165,7 @@ export default function Layout({ user: _user, onLogout }: LayoutProps) {
       <main className={`main-content ${isChatbotPage ? 'chatbot-mode' : ''}`}>
         <div
           className={`page-container ${isChatbotPage ? 'page-container-chatbot' : ''} ${isCoursesPage ? 'page-container-courses' : ''
-            } ${isDashboardPage ? 'page-container-dashboard' : ''}`}
+            } ${isDashboardPage ? 'page-container-dashboard' : ''} ${isAdminPage ? 'page-container-admin' : ''}`}
         >
           <Outlet />
         </div>
