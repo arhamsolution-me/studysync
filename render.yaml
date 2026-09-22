@@ -6,8 +6,23 @@ services:
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 5000
       - key: FRONTEND_URL
         value: https://studysync-tan.vercel.app
+      - key: SUPABASE_URL
+        value: https://twluwkcduduvswmjvqfl.supabase.co
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
