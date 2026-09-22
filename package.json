@@ -2,6 +2,6 @@
   "name": "studysync-platform",
   "private": true,
   "scripts": {
-    "build": "npm run build --prefix frontend"
+    "build": "cd frontend && npm install && npm run build"
   }
 }
