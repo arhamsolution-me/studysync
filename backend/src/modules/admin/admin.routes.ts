@@ -1,12 +1,82 @@
 import { Router, Request, Response } from 'express';
-import { authGuard, requireRole } from '../../middleware/authGuard';
+import { adminAuthGuard, AdminAuthRequest } from '../../middleware/adminAuthGuard';
+import { adminAuthService } from './admin.auth.service';
 import { adminService } from './admin.service';
 
 const router = Router();
 
-// Enforce authentication and strict Admin role for all routes in this module
-router.use(authGuard as any);
-router.use(requireRole('admin') as any);
+// ─── Dedicated Admin Authentication Endpoints ─────────────────────────
+
+/**
+ * POST /api/admin/auth/login
+ * High-security admin authentication using public.admin_accounts
+ */
+router.post('/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { identifier, password, securityPassphrase } = req.body;
+    const result = await adminAuthService.login({
+      identifier,
+      password,
+      securityPassphrase,
+    });
+    res.json({
+      success: true,
+      message: 'Admin authentication successful.',
+      data: result,
+    });
+  } catch (err: any) {
+    res.status(err.statusCode || 401).json({
+      success: false,
+      message: err.message || 'Admin authentication failed.',
+    });
+  }
+});
+
+/**
+ * GET /api/admin/auth/me
+ * Returns current authenticated admin profile
+ */
+router.get('/auth/me', adminAuthGuard as any, async (req: AdminAuthRequest, res: Response) => {
+  try {
+    const profile = await adminAuthService.getProfile(req.adminId!);
+    res.json({ success: true, data: profile });
+  } catch (err: any) {
+    res.status(err.statusCode || 401).json({
+      success: false,
+      message: err.message || 'Session expired.',
+    });
+  }
+});
+
+/**
+ * POST /api/admin/auth/logout
+ */
+router.post('/auth/logout', (_req: Request, res: Response) => {
+  res.json({ success: true, message: 'Admin session terminated.' });
+});
+
+/**
+ * POST /api/admin/auth/change-password
+ */
+router.post('/auth/change-password', adminAuthGuard as any, async (req: AdminAuthRequest, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const result = await adminAuthService.changePassword(
+      req.adminId!,
+      currentPassword,
+      newPassword
+    );
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.statusCode || 400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// ─── Enforce Dedicated Admin Guard on All Management Routes ───────────
+router.use(adminAuthGuard as any);
 
 /**
  * GET /api/admin/overview
@@ -126,7 +196,7 @@ router.patch('/courses/:id/status', async (req: Request, res: Response) => {
 
 /**
  * GET /api/admin/ai-usage
- * Overview of AI tokens, BYOK keys, and system quotas
+ * System AI consumption vs BYOK distribution
  */
 router.get('/ai-usage', async (_req: Request, res: Response) => {
   try {

@@ -300,3 +300,18 @@ model PriorityRerankLog {
 
   @@map("priority_rerank_log")
 }
+
+model AdminAccount {
+  id                 String    @id @default(uuid()) @db.Uuid
+  username           String    @unique
+  email              String    @unique
+  passwordHash       String    @map("password_hash")
+  securityPassphrase String?   @map("security_passphrase")
+  role               String    @default("superadmin")
+  isActive           Boolean   @default(true) @map("is_active")
+  lastLogin          DateTime? @map("last_login") @db.Timestamptz()
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("admin_accounts")
+}

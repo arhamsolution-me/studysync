@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { adminApi } from '../services/api';
+import { adminApi, setAdminToken, getAdminToken } from '../services/api';
 import {
   Users,
   BookOpen,
@@ -11,29 +12,23 @@ import {
   Shield,
   Key,
   Database,
-  Server,
   Sparkles,
   Zap,
   Lock,
-  ChevronRight,
   UserCheck,
   UserX,
   ExternalLink,
   Activity,
-  Award,
+  LogOut,
+  KeyRound,
+  ShieldAlert,
 } from 'lucide-react';
+import '../styles/admin.css';
 
-interface AdminPortalProps {
-  user: {
-    id: string;
-    fullName: string;
-    email: string;
-    role: string;
-  };
-}
-
-export default function AdminPortal({ user }: AdminPortalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'courses' | 'ai' | 'health'>('overview');
+export default function AdminPortal() {
+  const navigate = useNavigate();
+  const [adminUser, setAdminUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'courses' | 'ai' | 'security'>('overview');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -52,14 +47,53 @@ export default function AdminPortal({ user }: AdminPortalProps) {
 
   const [aiUsage, setAiUsage] = useState<any>(null);
 
-  // Updating states
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPass, setChangingPass] = useState(false);
+
+  // Action states
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
+  // Initial authorization check
   useEffect(() => {
-    loadAllData();
+    checkAdminAuth();
   }, []);
 
+  const checkAdminAuth = async () => {
+    const token = getAdminToken();
+    if (!token) {
+      navigate('/admin/login', { replace: true });
+      return;
+    }
+
+    try {
+      const res = await adminApi.me();
+      if (res.data.success && res.data.data) {
+        setAdminUser(res.data.data);
+        loadAllData();
+      } else {
+        setAdminToken(null);
+        navigate('/admin/login', { replace: true });
+      }
+    } catch {
+      setAdminToken(null);
+      navigate('/admin/login', { replace: true });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await adminApi.logout();
+    } catch {}
+    setAdminToken(null);
+    toast.success('Admin session ended securely.');
+    navigate('/admin/login', { replace: true });
+  };
+
   useEffect(() => {
+    if (!adminUser) return;
     if (activeTab === 'users') {
       fetchUsers(1);
     } else if (activeTab === 'courses') {
@@ -78,7 +112,7 @@ export default function AdminPortal({ user }: AdminPortalProps) {
         fetchCourses(1),
         fetchAiUsage(),
       ]);
-    } catch (err: any) {
+    } catch {
       toast.error('Failed to load some admin telemetry.');
     } finally {
       setLoading(false);
@@ -154,7 +188,7 @@ export default function AdminPortal({ user }: AdminPortalProps) {
     }
   };
 
-  const handleUpdatePlan = async (userId: string, newPlan: 'free' | 'pro' | 'campus') => {
+  const handlePlanChange = async (userId: string, newPlan: 'free' | 'pro' | 'campus') => {
     setActionLoadingId(userId);
     try {
       const res = await adminApi.updateUserPlan(userId, newPlan);
@@ -166,54 +200,38 @@ export default function AdminPortal({ user }: AdminPortalProps) {
         fetchOverview();
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to update user plan');
+      toast.error(err?.response?.data?.message || 'Failed to update plan');
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  const handleToggleUserBlock = async (userId: string, currentStatus: boolean, userEmail: string) => {
-    const nextStatus = !currentStatus;
-    if (userId === user.id && nextStatus) {
-      toast.error('You cannot suspend your own admin account!');
-      return;
-    }
-    const confirmMsg = nextStatus
-      ? `Are you sure you want to suspend ${userEmail}? They will be blocked from logging in.`
-      : `Unblock ${userEmail}?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
+  const handleToggleUserBlock = async (userId: string, currentBlocked: boolean) => {
+    const nextStatus = !currentBlocked;
     setActionLoadingId(userId);
     try {
       const res = await adminApi.updateUserStatus(userId, nextStatus);
       if (res.data.success) {
-        toast.success(res.data.message);
+        toast.success(nextStatus ? 'Student account suspended' : 'Student account reactivated');
         setUsersList((prev) =>
           prev.map((u) => (u.id === userId ? { ...u, isBlocked: nextStatus } : u))
         );
         fetchOverview();
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to change user status');
+      toast.error(err?.response?.data?.message || 'Failed to update account status');
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  const handleToggleCourseBlock = async (courseId: string, currentStatus: boolean, courseName: string) => {
-    const nextStatus = !currentStatus;
-    const confirmMsg = nextStatus
-      ? `Suspend course "${courseName}"? Students will not be able to chat or generate tasks for it.`
-      : `Unblock course "${courseName}"?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
+  const handleToggleCourseBlock = async (courseId: string, currentBlocked: boolean) => {
+    const nextStatus = !currentBlocked;
     setActionLoadingId(courseId);
     try {
       const res = await adminApi.updateCourseStatus(courseId, nextStatus);
       if (res.data.success) {
-        toast.success(res.data.message);
+        toast.success(nextStatus ? 'Course suspended' : 'Course restored');
         setCoursesList((prev) =>
           prev.map((c) => (c.id === courseId ? { ...c, isBlocked: nextStatus } : c))
         );
@@ -226,12 +244,57 @@ export default function AdminPortal({ user }: AdminPortalProps) {
     }
   };
 
+  const handleChangeAdminPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword) {
+      toast.error('Please enter current and new passwords.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters long.');
+      return;
+    }
+
+    setChangingPass(true);
+    try {
+      const res = await adminApi.changePassword({ currentPassword, newPassword });
+      if (res.data.success) {
+        toast.success('Admin password updated successfully.');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        toast.error(res.data.message || 'Could not update password.');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to change password.');
+    } finally {
+      setChangingPass(false);
+    }
+  };
+
   if (loading && !overview) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin mb-4" />
-        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Connecting to Admin Telemetry...</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Verifying role and querying Supabase Cloud database</p>
+      <div className="admin-shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '42px',
+            height: '42px',
+            border: '3px solid rgba(99,102,241,0.2)',
+            borderTopColor: '#6366F1',
+            borderRadius: '50%',
+            animation: 'adminPulse 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#FFFFFF' }}>Connecting to Operations Vault...</h3>
+          <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: '#94A3B8' }}>
+            Verifying isolated admin session & telemetry
+          </p>
+        </div>
       </div>
     );
   }
@@ -240,814 +303,824 @@ export default function AdminPortal({ user }: AdminPortalProps) {
   const aStats = overview?.activity || {};
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fadeIn">
-      {/* ─── ADMIN BANNER & HEADER ─── */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+    <div className="admin-shell">
+      <div className="admin-shell-glow" />
+      <div className="admin-shell-glow-2" />
+
+      {/* ─── Dedicated Admin Navigation Bar ─────────────────────────────── */}
+      <header className="admin-nav">
+        <div className="admin-nav-left">
+          <div className="admin-brand-icon">
+            <Shield size={22} />
+          </div>
+          <div className="admin-brand-text">
+            <h2>StudySync AI Operations</h2>
+            <p>High-Security Control Center</p>
+          </div>
+        </div>
+
+        <div className="admin-nav-right">
+          <div className="admin-badge-live">
+            <span className="admin-pulse-dot" />
+            Live DB Connected
+          </div>
+
+          {adminUser && (
+            <div className="admin-user-pill">
+              <Key size={14} style={{ color: '#F59E0B' }} />
+              <span>Admin: <strong>{adminUser.username}</strong></span>
+            </div>
+          )}
+
+          <button onClick={handleLogout} className="admin-btn-logout" title="Sign out of Operations">
+            <LogOut size={15} />
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      {/* ─── Main Admin Container ───────────────────────────────────────── */}
+      <main className="admin-container">
+        {/* Banner Card */}
+        <section className="admin-banner">
+          <div className="admin-banner-glow" />
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 tracking-wide uppercase">
-                <Shield className="w-3.5 h-3.5 text-indigo-400" />
-                Root Administrator Portal
+            <div className="admin-banner-header">
+              <span className="admin-role-badge">
+                <Shield size={13} />
+                Isolated Master Session
               </span>
-              <span className="text-xs text-slate-400">
-                Connected as: <strong className="text-slate-200">{user.email}</strong>
+              <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
+                Active Admin ID: <strong style={{ color: '#CBD5E1' }}>{adminUser?.email || 'admin@studysync.ai'}</strong>
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              StudySync AI Operations Center
-            </h1>
-            <p className="text-slate-300 text-sm mt-1 max-w-2xl">
-              Real-time student telemetry, subscription governance, BYOK vs System AI consumption tracking, and course moderation.
+            <h1 className="admin-banner-title">Platform Operations Center</h1>
+            <p className="admin-banner-subtitle">
+              Monitor real-time student activity, govern subscriptions, audit BYOK vs System AI token consumption, and enforce moderation.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="admin-banner-actions">
             <button
               onClick={handleRefresh}
+              className="admin-btn-primary"
               disabled={refreshing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium border border-white/15 transition-all shadow-sm active:scale-95 disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
               {refreshing ? 'Syncing...' : 'Sync Telemetry'}
             </button>
             <a
               href="https://supabase.com/dashboard/project/twluwkcduduvswmjvqfl"
               target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-all shadow-md shadow-indigo-600/30 active:scale-95"
+              rel="noopener noreferrer"
+              className="admin-btn-secondary"
             >
-              <Database className="w-4 h-4" />
-              Supabase DB
-              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              <Database size={15} style={{ color: '#38BDF8' }} />
+              Supabase Cloud
+              <ExternalLink size={13} />
             </a>
           </div>
-        </div>
+        </section>
 
-        {/* ─── QUICK METRICS ROW ─── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-indigo-500/20">
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <Users className="w-3 h-3 text-indigo-400" /> Total Students
-            </span>
-            <div className="text-xl font-bold mt-1 text-white">{uStats.total ?? 0}</div>
-            <span className="text-[11px] text-emerald-400">+{uStats.newThisWeek ?? 0} this week</span>
-          </div>
-
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <Award className="w-3 h-3 text-amber-400" /> Pro / Campus
-            </span>
-            <div className="text-xl font-bold mt-1 text-white">
-              {(uStats.planBreakdown?.pro ?? 0) + (uStats.planBreakdown?.campus ?? 0)}
+        {/* ─── 4 KPI Metrics Grid ───────────────────────────────────────── */}
+        <section className="admin-stats-grid">
+          <div className="admin-stat-card">
+            <div className="admin-stat-top">
+              <span className="admin-stat-label">Total Students</span>
+              <div className="admin-stat-icon indigo">
+                <Users size={19} />
+              </div>
             </div>
-            <span className="text-[11px] text-slate-400">
-              {uStats.planBreakdown?.free ?? 0} on Free
-            </span>
-          </div>
-
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <Key className="w-3 h-3 text-purple-400" /> BYOK Users
-            </span>
-            <div className="text-xl font-bold mt-1 text-purple-300">
-              {uStats.aiModeBreakdown?.byok ?? 0}
+            <div className="admin-stat-value">{uStats.total || 0}</div>
+            <div className="admin-stat-subtext">
+              <strong style={{ color: '#34D399' }}>+{uStats.newThisWeek || 0}</strong> new this week • {uStats.blocked || 0} suspended
             </div>
-            <span className="text-[11px] text-slate-400">Own API Key</span>
           </div>
 
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <Cpu className="w-3 h-3 text-cyan-400" /> System AI Users
-            </span>
-            <div className="text-xl font-bold mt-1 text-cyan-300">
-              {uStats.aiModeBreakdown?.system ?? 0}
+          <div className="admin-stat-card">
+            <div className="admin-stat-top">
+              <span className="admin-stat-label">Pro / Campus Plans</span>
+              <div className="admin-stat-icon amber">
+                <Sparkles size={19} />
+              </div>
             </div>
-            <span className="text-[11px] text-slate-400">Using Server Key</span>
-          </div>
-
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <BookOpen className="w-3 h-3 text-blue-400" /> Active Courses
-            </span>
-            <div className="text-xl font-bold mt-1 text-white">
-              {(aStats.totalCourses ?? 0) - (aStats.blockedCourses ?? 0)}
+            <div className="admin-stat-value">
+              {(uStats.planBreakdown?.pro || 0) + (uStats.planBreakdown?.campus || 0)}
             </div>
-            <span className="text-[11px] text-rose-400">
-              {aStats.blockedCourses ?? 0} suspended
-            </span>
+            <div className="admin-stat-subtext">
+              {uStats.planBreakdown?.free || 0} on Free tier
+            </div>
           </div>
 
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <CheckCircle className="w-3 h-3 text-emerald-400" /> Tasks Logged
-            </span>
-            <div className="text-xl font-bold mt-1 text-white">{aStats.totalTasks ?? 0}</div>
-            <span className="text-[11px] text-emerald-400">
-              {aStats.completedTasks ?? 0} completed
-            </span>
+          <div className="admin-stat-card">
+            <div className="admin-stat-top">
+              <span className="admin-stat-label">Active Courses</span>
+              <div className="admin-stat-icon cyan">
+                <BookOpen size={19} />
+              </div>
+            </div>
+            <div className="admin-stat-value">{aStats.totalCourses || 0}</div>
+            <div className="admin-stat-subtext">
+              {aStats.blockedCourses || 0} suspended • {aStats.totalMaterials || 0} materials
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* ─── NAVIGATION TABS ─── */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 mb-6 gap-2 sm:gap-4 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'overview'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Activity className="w-4 h-4" />
-          Overview & Analytics
-        </button>
+          <div className="admin-stat-card">
+            <div className="admin-stat-top">
+              <span className="admin-stat-label">AI Interactions</span>
+              <div className="admin-stat-icon emerald">
+                <Cpu size={19} />
+              </div>
+            </div>
+            <div className="admin-stat-value">{aStats.totalChatMessages || 0}</div>
+            <div className="admin-stat-subtext">
+              {uStats.aiModeBreakdown?.byok || 0} BYOK users • {uStats.aiModeBreakdown?.system || 0} System Key
+            </div>
+          </div>
+        </section>
 
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'users'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Student Directory ({usersPagination.total || uStats.total || 0})
-        </button>
+        {/* ─── Navigation Tabs ─────────────────────────────────────────── */}
+        <nav className="admin-tabs">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`admin-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
+          >
+            <Activity size={16} />
+            Overview & Analytics
+          </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+          >
+            <Users size={16} />
+            Student Directory
+            <span className="admin-tab-badge">{uStats.total || 0}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('courses')}
+            className={`admin-tab-btn ${activeTab === 'courses' ? 'active' : ''}`}
+          >
+            <BookOpen size={16} />
+            Course Moderation
+            <span className="admin-tab-badge">{aStats.totalCourses || 0}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`admin-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+          >
+            <Cpu size={16} />
+            AI & BYOK Quotas
+          </button>
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`admin-tab-btn ${activeTab === 'security' ? 'active' : ''}`}
+          >
+            <Lock size={16} />
+            Security & Credentials
+          </button>
+        </nav>
 
-        <button
-          onClick={() => setActiveTab('courses')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'courses'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          Course Moderation ({coursesPagination.total || aStats.totalCourses || 0})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ai')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'ai'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Key className="w-4 h-4" />
-          AI & BYOK Quotas
-        </button>
-
-        <button
-          onClick={() => setActiveTab('health')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all whitespace-nowrap ${
-            activeTab === 'health'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Server className="w-4 h-4" />
-          System & Health
-        </button>
-      </div>
-
-      {/* ─── TAB 1: OVERVIEW & ANALYTICS ─── */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Plan Distribution Card */}
-            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-                <Award className="w-5 h-5 text-indigo-500" />
-                Subscription Plans Breakdown
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
-                    <span>Free Plan (Standard)</span>
-                    <span>{uStats.planBreakdown?.free ?? 0} students</span>
+        {/* ─── TAB 1: OVERVIEW & ANALYTICS ─────────────────────────────── */}
+        {activeTab === 'overview' && (
+          <div className="animate-fadeIn">
+            <div className="admin-grid-2">
+              <div className="admin-card-section">
+                <h3>Subscription Plans Breakdown</h3>
+                <p className="sub">Distribution of student accounts across billing tiers</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px' }}>
+                      <span>Free Plan (Standard)</span>
+                      <strong>{uStats.planBreakdown?.free || 0} students</strong>
+                    </div>
+                    <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        background: '#94A3B8',
+                        width: `${((uStats.planBreakdown?.free || 0) / Math.max(uStats.total || 1, 1)) * 100}%`
+                      }} />
+                    </div>
                   </div>
-                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-slate-400 rounded-full"
-                      style={{ width: `${((uStats.planBreakdown?.free || 0) / (uStats.total || 1)) * 100}%` }}
-                    />
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px' }}>
+                      <span style={{ color: '#818CF8' }}>Pro Plan ($9/mo)</span>
+                      <strong style={{ color: '#818CF8' }}>{uStats.planBreakdown?.pro || 0} students</strong>
+                    </div>
+                    <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        background: '#6366F1',
+                        width: `${((uStats.planBreakdown?.pro || 0) / Math.max(uStats.total || 1, 1)) * 100}%`
+                      }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '6px' }}>
+                      <span style={{ color: '#FBBF24' }}>Campus Plan (University)</span>
+                      <strong style={{ color: '#FBBF24' }}>{uStats.planBreakdown?.campus || 0} students</strong>
+                    </div>
+                    <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        background: '#F59E0B',
+                        width: `${((uStats.planBreakdown?.campus || 0) / Math.max(uStats.total || 1, 1)) * 100}%`
+                      }} />
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div>
-                  <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
-                    <span className="text-indigo-600 dark:text-indigo-400 font-semibold">Pro Plan ($9/mo)</span>
-                    <span className="font-semibold">{uStats.planBreakdown?.pro ?? 0} students</span>
+              <div className="admin-card-section">
+                <h3>AI Key Consumption Model</h3>
+                <p className="sub">Platform resource usage vs user-provided BYOK keys</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ padding: '16px', background: 'var(--admin-bg-card)', borderRadius: '10px', border: '1px solid var(--admin-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Zap size={16} style={{ color: '#F59E0B' }} />
+                        Server System Key
+                      </span>
+                      <span className="admin-pill plan-pro">{uStats.aiModeBreakdown?.system || 0} users</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#94A3B8' }}>
+                      Consuming server system quotas (Gemini 2.5 Flash / Groq Llama 3.3).
+                    </p>
                   </div>
-                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-600 rounded-full"
-                      style={{ width: `${((uStats.planBreakdown?.pro || 0) / (uStats.total || 1)) * 100}%` }}
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
-                    <span className="text-amber-600 dark:text-amber-400 font-semibold">Campus Plan (University)</span>
-                    <span className="font-semibold">{uStats.planBreakdown?.campus ?? 0} students</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-500 rounded-full"
-                      style={{ width: `${((uStats.planBreakdown?.campus || 0) / (uStats.total || 1)) * 100}%` }}
-                    />
+                  <div style={{ padding: '16px', background: 'var(--admin-bg-card)', borderRadius: '10px', border: '1px solid var(--admin-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Key size={16} style={{ color: '#06B6D4' }} />
+                        Student BYOK Keys
+                      </span>
+                      <span className="admin-pill plan-campus">{uStats.aiModeBreakdown?.byok || 0} users</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#94A3B8' }}>
+                      Zero cost to server — users provided custom Gemini/Groq/OpenAI keys.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* AI Engine Distribution */}
-            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-                <Cpu className="w-5 h-5 text-purple-500" />
-                AI Key Consumption Model
-              </h3>
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-700/60 mb-4">
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-                    <Zap className="w-4 h-4 text-cyan-500" /> Server System Key
-                  </span>
-                  <span className="font-bold text-slate-900 dark:text-white">{uStats.aiModeBreakdown?.system ?? 0}</span>
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  Consuming server tokens (Gemini 2.5 Flash / Groq Llama 3.3).
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/20">
-                <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-purple-700 dark:text-purple-300 font-medium flex items-center gap-1.5">
-                    <Key className="w-4 h-4 text-purple-500" /> Student BYOK Keys
-                  </span>
-                  <span className="font-bold text-purple-700 dark:text-purple-300">{uStats.aiModeBreakdown?.byok ?? 0}</span>
-                </div>
-                <div className="text-xs text-purple-600/80 dark:text-purple-400/80">
-                  Zero cost to server — users provided custom Gemini/Groq/OpenAI keys.
-                </div>
-              </div>
-            </div>
-
-            {/* Activity Summary */}
-            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-                <Sparkles className="w-5 h-5 text-emerald-500" />
-                Workload & Knowledge Base
-              </h3>
-              <div className="grid grid-cols-2 gap-3 text-center">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{aStats.totalCourses ?? 0}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Courses Created</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{aStats.totalMaterials ?? 0}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Docs & Notes Indexed</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-xl font-bold text-cyan-600 dark:text-cyan-400">{aStats.totalChatMessages ?? 0}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">AI Interactions</div>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
-                  <div className="text-xl font-bold text-amber-600 dark:text-amber-400">{aStats.totalTasks ?? 0}</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Academic Tasks</div>
-                </div>
+            {/* Recent Signups */}
+            <div className="admin-card-section">
+              <h3>Recently Enrolled Students</h3>
+              <p className="sub">Latest student registrations synced from Supabase Cloud</p>
+              <div className="admin-table-wrapper" style={{ marginBottom: 0 }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Billing Plan</th>
+                      <th>AI Preference</th>
+                      <th>Registered</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(overview?.recentSignups || []).map((s: any) => (
+                      <tr key={s.id}>
+                        <td>
+                          <div className="admin-user-cell">
+                            <div className="admin-user-avatar">
+                              {s.fullName?.[0]?.toUpperCase() || 'S'}
+                            </div>
+                            <div className="admin-user-info">
+                              <h4>{s.fullName}</h4>
+                              <p>{s.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`admin-pill plan-${s.plan || 'free'}`}>
+                            {s.plan || 'free'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.8rem', color: '#CBD5E1' }}>
+                            {s.aiProviderPreference === 'byok' ? 'Custom BYOK' : 'System Key'}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
+                            {new Date(s.createdAt).toLocaleDateString()}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`admin-pill ${s.isBlocked ? 'status-blocked' : 'status-active'}`}>
+                            {s.isBlocked ? 'Suspended' : 'Active'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Recent Signups Table */}
-          <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-500" />
-                Latest Registered Students
-              </h3>
-              <button
-                onClick={() => setActiveTab('users')}
-                className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-1"
-              >
-                View full directory <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+        {/* ─── TAB 2: STUDENT DIRECTORY ─────────────────────────────────── */}
+        {activeTab === 'users' && (
+          <div className="animate-fadeIn">
+            <div className="admin-control-bar">
+              <div className="admin-search-wrap">
+                <Search className="admin-search-icon" size={17} />
+                <input
+                  type="text"
+                  placeholder="Search students by name or email..."
+                  className="admin-input-search"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchUsers(1)}
+                />
+              </div>
+
+              <div className="admin-filter-group">
+                <select
+                  className="admin-select"
+                  value={userPlanFilter}
+                  onChange={(e) => setUserPlanFilter(e.target.value)}
+                >
+                  <option value="all">All Plans</option>
+                  <option value="free">Free Tier</option>
+                  <option value="pro">Pro Tier</option>
+                  <option value="campus">Campus Tier</option>
+                </select>
+
+                <select
+                  className="admin-select"
+                  value={userStatusFilter}
+                  onChange={(e) => setUserStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="blocked">Suspended Only</option>
+                </select>
+
+                <button
+                  onClick={() => fetchUsers(1)}
+                  className="admin-btn-secondary"
+                >
+                  Apply Filters
+                </button>
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-xs uppercase bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
                   <tr>
-                    <th className="py-3 px-4">Student</th>
-                    <th className="py-3 px-4">Role</th>
-                    <th className="py-3 px-4">Plan</th>
-                    <th className="py-3 px-4">AI Mode</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Joined</th>
+                    <th>Student Name & Email</th>
+                    <th>Plan Management</th>
+                    <th>Courses</th>
+                    <th>Chat Msgs</th>
+                    <th>AI Mode</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                  {(overview?.recentSignups || []).map((u: any) => (
-                    <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-750 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-slate-900 dark:text-white">{u.fullName || 'Student'}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{u.email}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
-                          u.role === 'admin' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
-                        }`}>
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="uppercase text-xs font-bold text-indigo-600 dark:text-indigo-400">{u.plan || 'FREE'}</span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-xs text-slate-600 dark:text-slate-300">
-                          {u.aiProviderPreference === 'byok' ? '🔑 Custom BYOK' : '⚡ Server System'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        {u.isBlocked ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-rose-600 font-medium">
-                            <Lock className="w-3 h-3" /> Suspended
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                            <CheckCircle className="w-3 h-3" /> Active
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400">
-                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+                <tbody>
+                  {usersList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                        No students found matching your criteria.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    usersList.map((u) => (
+                      <tr key={u.id}>
+                        <td>
+                          <div className="admin-user-cell">
+                            <div className="admin-user-avatar">
+                              {u.fullName?.[0]?.toUpperCase() || 'S'}
+                            </div>
+                            <div className="admin-user-info">
+                              <h4>{u.fullName}</h4>
+                              <p>{u.email}</p>
+                              {u.university && (
+                                <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                                  {u.university} {u.major ? `• ${u.major}` : ''}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <select
+                            className="admin-select"
+                            value={u.plan || 'free'}
+                            disabled={actionLoadingId === u.id}
+                            onChange={(e) => handlePlanChange(u.id, e.target.value as any)}
+                          >
+                            <option value="free">Free</option>
+                            <option value="pro">Pro ($9/mo)</option>
+                            <option value="campus">Campus</option>
+                          </select>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{u.coursesCount || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{u.chatMessagesCount || 0}</span>
+                        </td>
+                        <td>
+                          <span className={`admin-pill ${u.aiProviderPreference === 'byok' ? 'plan-campus' : 'plan-pro'}`}>
+                            {u.aiProviderPreference === 'byok' ? `BYOK (${u.activeByokProvider || 'Custom'})` : 'System Key'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`admin-pill ${u.isBlocked ? 'status-blocked' : 'status-active'}`}>
+                            {u.isBlocked ? 'Suspended' : 'Active'}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            onClick={() => handleToggleUserBlock(u.id, !!u.isBlocked)}
+                            disabled={actionLoadingId === u.id}
+                            className={`admin-btn-action ${u.isBlocked ? 'reactivate' : 'suspend'}`}
+                          >
+                            {u.isBlocked ? (
+                              <>
+                                <UserCheck size={14} />
+                                Reactivate
+                              </>
+                            ) : (
+                              <>
+                                <UserX size={14} />
+                                Suspend
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
+
+              {/* Pagination */}
+              <div className="admin-pagination">
+                <span>
+                  Showing {usersList.length} of {usersPagination.total} registered students
+                </span>
+                <div className="admin-pagination-btns">
+                  <button
+                    className="admin-page-btn"
+                    disabled={usersPagination.page <= 1}
+                    onClick={() => fetchUsers(usersPagination.page - 1)}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#FFFFFF' }}>
+                    Page {usersPagination.page} of {usersPagination.totalPages}
+                  </span>
+                  <button
+                    className="admin-page-btn"
+                    disabled={usersPagination.page >= usersPagination.totalPages}
+                    onClick={() => fetchUsers(usersPagination.page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ─── TAB 2: STUDENT USERS DIRECTORY ─── */}
-      {activeTab === 'users' && (
-        <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-            {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-              <input
-                type="text"
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && fetchUsers(1)}
-                placeholder="Search students by email or name..."
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+        {/* ─── TAB 3: COURSE MODERATION ─────────────────────────────────── */}
+        {activeTab === 'courses' && (
+          <div className="animate-fadeIn">
+            <div className="admin-control-bar">
+              <div className="admin-search-wrap">
+                <Search className="admin-search-icon" size={17} />
+                <input
+                  type="text"
+                  placeholder="Search courses by code or title..."
+                  className="admin-input-search"
+                  value={courseSearch}
+                  onChange={(e) => setCourseSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && fetchCourses(1)}
+                />
+              </div>
+
+              <div className="admin-filter-group">
+                <select
+                  className="admin-select"
+                  value={courseStatusFilter}
+                  onChange={(e) => setCourseStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Courses</option>
+                  <option value="active">Active Only</option>
+                  <option value="blocked">Suspended Only</option>
+                </select>
+
+                <button
+                  onClick={() => fetchCourses(1)}
+                  className="admin-btn-secondary"
+                >
+                  Apply Filters
+                </button>
+              </div>
             </div>
 
-            {/* Filters */}
-            <div className="flex items-center gap-3">
-              <select
-                value={userPlanFilter}
-                onChange={(e) => setUserPlanFilter(e.target.value)}
-                className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">All Plans</option>
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="campus">Campus</option>
-              </select>
-
-              <select
-                value={userStatusFilter}
-                onChange={(e) => setUserStatusFilter(e.target.value)}
-                className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">All Statuses</option>
-                <option value="active">Active Only</option>
-                <option value="blocked">Suspended Only</option>
-              </select>
-
-              <button
-                onClick={() => fetchUsers(1)}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors"
-              >
-                Search
-              </button>
-            </div>
-          </div>
-
-          {/* Users Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="py-3 px-4">Student</th>
-                  <th className="py-3 px-4">Plan (Click to Change)</th>
-                  <th className="py-3 px-4">AI Mode</th>
-                  <th className="py-3 px-4 text-center">Courses</th>
-                  <th className="py-3 px-4 text-center">Tasks</th>
-                  <th className="py-3 px-4 text-center">Chats</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Moderation</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                {usersList.length === 0 ? (
+            <div className="admin-table-wrapper">
+              <table className="admin-table">
+                <thead>
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 text-sm">
-                      No student records match the search filter.
-                    </td>
+                    <th>Course</th>
+                    <th>Instructor & Owner</th>
+                    <th>Materials</th>
+                    <th>Chats</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Moderation</th>
                   </tr>
-                ) : (
-                  usersList.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-750 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                          {u.fullName || 'Student'}
-                          {u.role === 'admin' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-500">
-                              ADMIN
+                </thead>
+                <tbody>
+                  {coursesList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+                        No courses found.
+                      </td>
+                    </tr>
+                  ) : (
+                    coursesList.map((c) => (
+                      <tr key={c.id}>
+                        <td>
+                          <div>
+                            <span style={{ fontWeight: 700, color: '#38BDF8', fontSize: '0.85rem' }}>
+                              {c.code}
                             </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{u.email}</div>
-                        {u.university && (
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                            {u.university} {u.major ? `• ${u.major}` : ''}
+                            <h4 style={{ margin: '2px 0 0', fontSize: '0.88rem', color: '#FFFFFF' }}>
+                              {c.title}
+                            </h4>
                           </div>
-                        )}
-                      </td>
-
-                      {/* Plan Change Dropdown */}
-                      <td className="py-3 px-4">
-                        <select
-                          disabled={actionLoadingId === u.id}
-                          value={u.plan || 'free'}
-                          onChange={(e) => handleUpdatePlan(u.id, e.target.value as any)}
-                          className={`text-xs font-bold uppercase rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer ${
-                            u.plan === 'pro'
-                              ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700'
-                              : u.plan === 'campus'
-                              ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700'
-                              : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600'
-                          }`}
-                        >
-                          <option value="free">FREE</option>
-                          <option value="pro">PRO ($9/mo)</option>
-                          <option value="campus">CAMPUS (Unltd)</option>
-                        </select>
-                      </td>
-
-                      {/* AI Mode & BYOK status */}
-                      <td className="py-3 px-4">
-                        {u.aiProviderPreference === 'byok' ? (
-                          <div className="flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 font-medium">
-                            <Key className="w-3.5 h-3.5 text-purple-500" />
-                            <span>BYOK ({u.activeByokProvider || 'Custom'})</span>
+                        </td>
+                        <td>
+                          <div>
+                            <span style={{ color: '#FFFFFF' }}>{c.instructor || 'Not specified'}</span>
+                            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#94A3B8' }}>
+                              Owner: {c.user?.fullName || c.user?.email || 'Student'}
+                            </p>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                            <Zap className="w-3.5 h-3.5 text-cyan-500" />
-                            <span>Server System</span>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
-                        {u.coursesCount}
-                      </td>
-
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
-                        {u.tasksCount}
-                      </td>
-
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
-                        {u.chatMessagesCount}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {u.isBlocked ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                            <UserX className="w-3 h-3" /> Suspended
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{c.materialsCount || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600 }}>{c.chatsCount || 0}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>
+                            {new Date(c.createdAt).toLocaleDateString()}
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                            <UserCheck className="w-3 h-3" /> Active
+                        </td>
+                        <td>
+                          <span className={`admin-pill ${c.isBlocked ? 'status-blocked' : 'status-active'}`}>
+                            {c.isBlocked ? 'Suspended' : 'Active'}
                           </span>
-                        )}
-                      </td>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            onClick={() => handleToggleCourseBlock(c.id, !!c.isBlocked)}
+                            disabled={actionLoadingId === c.id}
+                            className={`admin-btn-action ${c.isBlocked ? 'reactivate' : 'suspend'}`}
+                          >
+                            {c.isBlocked ? (
+                              <>
+                                <CheckCircle size={14} />
+                                Restore Course
+                              </>
+                            ) : (
+                              <>
+                                <ShieldAlert size={14} />
+                                Suspend Course
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
 
-                      {/* Action: Block / Unblock */}
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          disabled={actionLoadingId === u.id || u.id === user.id}
-                          onClick={() => handleToggleUserBlock(u.id, u.isBlocked, u.email)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 disabled:opacity-40 ${
-                            u.isBlocked
-                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                              : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                          }`}
-                        >
-                          {u.isBlocked ? 'Reactivate' : 'Suspend'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2">
-            <span>
-              Showing page {usersPagination.page} of {usersPagination.totalPages} ({usersPagination.total} total students)
-            </span>
-            <div className="flex gap-2">
-              <button
-                disabled={usersPagination.page <= 1}
-                onClick={() => fetchUsers(usersPagination.page - 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <button
-                disabled={usersPagination.page >= usersPagination.totalPages}
-                onClick={() => fetchUsers(usersPagination.page + 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB 3: COURSE MODERATION ─── */}
-      {activeTab === 'courses' && (
-        <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-              <input
-                type="text"
-                value={courseSearch}
-                onChange={(e) => setCourseSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && fetchCourses(1)}
-                placeholder="Search courses by course title..."
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-3">
-              <select
-                value={courseStatusFilter}
-                onChange={(e) => setCourseStatusFilter(e.target.value)}
-                className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">All Course Statuses</option>
-                <option value="active">Active Courses</option>
-                <option value="blocked">Suspended Courses</option>
-              </select>
-
-              <button
-                onClick={() => fetchCourses(1)}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors"
-              >
-                Search
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="py-3 px-4">Course</th>
-                  <th className="py-3 px-4">Student Owner</th>
-                  <th className="py-3 px-4 text-center">Docs / Notes</th>
-                  <th className="py-3 px-4 text-center">Chat Queries</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Created</th>
-                  <th className="py-3 px-4 text-right">Moderation Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-                {coursesList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400 text-sm">
-                      No courses match the moderation query.
-                    </td>
-                  </tr>
-                ) : (
-                  coursesList.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-750 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full"
-                            style={{ backgroundColor: c.colorTag || '#6366F1' }}
-                          />
-                          {c.name}
-                        </div>
-                        <div className="text-xs text-slate-400 font-mono">ID: {c.id.substring(0, 13)}...</div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-slate-800 dark:text-slate-200">{c.ownerName}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{c.ownerEmail}</div>
-                      </td>
-
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
-                        {c.materialsCount}
-                      </td>
-
-                      <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
-                        {c.chatMessagesCount}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {c.isBlocked ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                            <Lock className="w-3 h-3" /> Suspended
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                            <CheckCircle className="w-3 h-3" /> Active
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4 text-xs text-slate-500 dark:text-slate-400">
-                        {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          disabled={actionLoadingId === c.id}
-                          onClick={() => handleToggleCourseBlock(c.id, c.isBlocked, c.name)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 disabled:opacity-40 ${
-                            c.isBlocked
-                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                              : 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                          }`}
-                        >
-                          {c.isBlocked ? 'Reactivate Course' : 'Suspend Course'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2">
-            <span>
-              Showing page {coursesPagination.page} of {coursesPagination.totalPages} ({coursesPagination.total} total courses)
-            </span>
-            <div className="flex gap-2">
-              <button
-                disabled={coursesPagination.page <= 1}
-                onClick={() => fetchCourses(coursesPagination.page - 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <button
-                disabled={coursesPagination.page >= coursesPagination.totalPages}
-                onClick={() => fetchCourses(coursesPagination.page + 1)}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB 4: AI & BYOK QUOTAS ─── */}
-      {activeTab === 'ai' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-                <Key className="w-5 h-5 text-purple-500" />
-                BYOK Registered Keys
-              </h3>
-              <div className="text-3xl font-extrabold text-purple-600 dark:text-purple-400 mb-4">
-                {aiUsage?.keysRegistered?.total ?? 0}
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700">
-                  <span className="text-slate-600 dark:text-slate-400">Google Gemini Keys:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{aiUsage?.keysRegistered?.gemini ?? 0}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700">
-                  <span className="text-slate-600 dark:text-slate-400">Groq (Llama) Keys:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{aiUsage?.keysRegistered?.groq ?? 0}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-700">
-                  <span className="text-slate-600 dark:text-slate-400">OpenAI (GPT-4o) Keys:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{aiUsage?.keysRegistered?.openai ?? 0}</span>
+              <div className="admin-pagination">
+                <span>
+                  Showing {coursesList.length} of {coursesPagination.total} courses
+                </span>
+                <div className="admin-pagination-btns">
+                  <button
+                    className="admin-page-btn"
+                    disabled={coursesPagination.page <= 1}
+                    onClick={() => fetchCourses(coursesPagination.page - 1)}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#FFFFFF' }}>
+                    Page {coursesPagination.page} of {coursesPagination.totalPages}
+                  </span>
+                  <button
+                    className="admin-page-btn"
+                    disabled={coursesPagination.page >= coursesPagination.totalPages}
+                    onClick={() => fetchCourses(coursesPagination.page + 1)}
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm md:col-span-2">
-              <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
-                <Cpu className="w-5 h-5 text-indigo-500" />
-                Token Quota Policies Enforced
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                  <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 mb-2">
-                    Free Plan
-                  </span>
-                  <div className="text-lg font-bold text-slate-900 dark:text-white">50,000</div>
-                  <div className="text-xs text-slate-500 mt-1">tokens / month</div>
-                  <div className="text-[11px] text-slate-400 mt-3 border-t border-slate-200 dark:border-slate-800 pt-2">
-                    Model: Gemini 2.5 Flash via server key. Max 3 courses.
+        {/* ─── TAB 4: AI & BYOK QUOTAS ─────────────────────────────────── */}
+        {activeTab === 'ai' && (
+          <div className="animate-fadeIn">
+            {aiUsage && (
+              <div className="admin-stats-grid" style={{ marginBottom: '24px' }}>
+                <div className="admin-stat-card">
+                  <div className="admin-stat-top">
+                    <span className="admin-stat-label">System Key Consumers</span>
+                    <div className="admin-stat-icon amber">
+                      <Zap size={19} />
+                    </div>
                   </div>
+                  <div className="admin-stat-value">{aiUsage.userPreferences?.system || 0}</div>
+                  <div className="admin-stat-subtext">Students relying on server AI keys</div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
-                  <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-indigo-600 text-white mb-2">
-                    Pro Plan ($9/mo)
-                  </span>
-                  <div className="text-lg font-bold text-indigo-700 dark:text-indigo-300">500,000</div>
-                  <div className="text-xs text-indigo-600/70 dark:text-indigo-400 mt-1">tokens / month</div>
-                  <div className="text-[11px] text-indigo-600/70 dark:text-indigo-400 mt-3 border-t border-indigo-200 dark:border-indigo-800 pt-2">
-                    Gemini 2.5 Flash/Pro + Groq Llama 3.3. Max 15 courses.
+                <div className="admin-stat-card">
+                  <div className="admin-stat-top">
+                    <span className="admin-stat-label">BYOK Custom Keys</span>
+                    <div className="admin-stat-icon cyan">
+                      <Key size={19} />
+                    </div>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-                  <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-amber-500 text-white mb-2">
-                    Campus / BYOK
-                  </span>
-                  <div className="text-lg font-bold text-amber-700 dark:text-amber-300">Unlimited</div>
-                  <div className="text-xs text-amber-600/70 dark:text-amber-400 mt-1">tokens / month</div>
-                  <div className="text-[11px] text-amber-600/70 dark:text-amber-400 mt-3 border-t border-amber-200 dark:border-amber-800 pt-2">
-                    Zero server token liability. All models supported.
+                  <div className="admin-stat-value">{aiUsage.keysRegistered?.total || 0}</div>
+                  <div className="admin-stat-subtext">
+                    Gemini: {aiUsage.keysRegistered?.gemini || 0} • Groq: {aiUsage.keysRegistered?.groq || 0} • OpenAI: {aiUsage.keysRegistered?.openai || 0}
                   </div>
                 </div>
               </div>
+            )}
+
+            <div className="admin-card-section">
+              <h3>AI Consumption & BYOK Keys</h3>
+              <p className="sub">Platform token quota enforcement and custom key distribution</p>
+
+              <div className="admin-grid-2">
+                <div className="admin-quota-tier">
+                  <h4>
+                    <span>Free Student Tier</span>
+                    <span className="admin-pill plan-free">Default</span>
+                  </h4>
+                  <ul className="admin-quota-list">
+                    <li>
+                      <span>Monthly Token Quota:</span>
+                      <span>50,000 tokens / mo</span>
+                    </li>
+                    <li>
+                      <span>Active AI Model:</span>
+                      <span>Gemini 2.5 Flash (System Key)</span>
+                    </li>
+                    <li>
+                      <span>Allowed Courses:</span>
+                      <span>3 courses maximum</span>
+                    </li>
+                    <li>
+                      <span>BYOK Custom Keys:</span>
+                      <span style={{ color: '#EF4444' }}>Not supported</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="admin-quota-tier" style={{ borderColor: 'rgba(99,102,241,0.4)' }}>
+                  <h4>
+                    <span>Pro Tier ($9/month)</span>
+                    <span className="admin-pill plan-pro">Pro</span>
+                  </h4>
+                  <ul className="admin-quota-list">
+                    <li>
+                      <span>Monthly Token Quota:</span>
+                      <span>500,000 tokens / mo</span>
+                    </li>
+                    <li>
+                      <span>Active AI Models:</span>
+                      <span>Gemini 2.5 Pro + Groq Llama 3.3</span>
+                    </li>
+                    <li>
+                      <span>Allowed Courses:</span>
+                      <span>15 courses</span>
+                    </li>
+                    <li>
+                      <span>BYOK Custom Keys:</span>
+                      <span style={{ color: '#10B981' }}>Supported</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="admin-quota-tier" style={{ borderColor: 'rgba(245,158,11,0.4)' }}>
+                  <h4>
+                    <span>Campus Enterprise Tier</span>
+                    <span className="admin-pill plan-campus">Campus</span>
+                  </h4>
+                  <ul className="admin-quota-list">
+                    <li>
+                      <span>Monthly Token Quota:</span>
+                      <span>Unlimited High-Speed</span>
+                    </li>
+                    <li>
+                      <span>Active AI Models:</span>
+                      <span>All Models + Web Search RAG</span>
+                    </li>
+                    <li>
+                      <span>Allowed Courses:</span>
+                      <span>Unlimited</span>
+                    </li>
+                    <li>
+                      <span>BYOK Custom Keys:</span>
+                      <span style={{ color: '#10B981' }}>OpenAI / Groq / Gemini</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ─── TAB 5: SYSTEM & HEALTH ─── */}
-      {activeTab === 'health' && (
-        <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <h3 className="text-base font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-            <Server className="w-5 h-5 text-indigo-500" />
-            Infrastructure & Runtime Status
-          </h3>
+        {/* ─── TAB 5: SECURITY & CREDENTIALS ───────────────────────────── */}
+        {activeTab === 'security' && (
+          <div className="animate-fadeIn">
+            <div className="admin-card-section" style={{ maxWidth: '600px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <KeyRound size={20} style={{ color: '#F59E0B' }} />
+                <h3 style={{ margin: 0 }}>Update Administrator Password</h3>
+              </div>
+              <p className="sub">
+                Safely re-hash and update your administrative master credentials.
+              </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-emerald-900 dark:text-emerald-300">Vercel Serverless Function</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              </div>
-              <div className="text-xs text-emerald-700 dark:text-emerald-400">
-                Live at <code className="bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded">/api/health</code>. HTTP 200 OK.
-              </div>
-            </div>
+              <form onSubmit={handleChangeAdminPassword}>
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="current-pass">Current Master Password</label>
+                  <input
+                    id="current-pass"
+                    type="password"
+                    className="admin-form-input"
+                    style={{ paddingLeft: '14px' }}
+                    placeholder="Current password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                  />
+                </div>
 
-            <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-emerald-900 dark:text-emerald-300">Supabase Cloud DB</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              </div>
-              <div className="text-xs text-emerald-700 dark:text-emerald-400">
-                PostgreSQL 17 active in <code className="bg-white/60 dark:bg-black/30 px-1 py-0.5 rounded">ap-south-1</code>.
-              </div>
-            </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="new-pass">New Master Password</label>
+                  <input
+                    id="new-pass"
+                    type="password"
+                    className="admin-form-input"
+                    style={{ paddingLeft: '14px' }}
+                    placeholder="Min 8 characters"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                  />
+                </div>
 
-            <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-sm text-indigo-900 dark:text-indigo-300">WASM Crypto Engine</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-              </div>
-              <div className="text-xs text-indigo-700 dark:text-indigo-400">
-                WebAssembly Argon2id active with 0 native C++ dependencies.
-              </div>
+                <div className="admin-form-group">
+                  <label className="admin-form-label" htmlFor="confirm-pass">Confirm New Master Password</label>
+                  <input
+                    id="confirm-pass"
+                    type="password"
+                    className="admin-form-input"
+                    style={{ paddingLeft: '14px' }}
+                    placeholder="Repeat new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="admin-btn-primary"
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '10px' }}
+                  disabled={changingPass}
+                >
+                  <Lock size={16} />
+                  {changingPass ? 'Updating Master Password...' : 'Save New Master Password'}
+                </button>
+              </form>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   );
 }

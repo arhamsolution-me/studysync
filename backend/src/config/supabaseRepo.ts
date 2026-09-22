@@ -832,4 +832,52 @@ export const supabaseRepo: any = {
       }
     },
   },
+
+  adminAccount: {
+    findUnique: async ({ where }: { where: { id?: string; username?: string; email?: string } }) => {
+      try {
+        let query = supabase.from('admin_accounts').select('*');
+        if (where.id) query = query.eq('id', where.id);
+        else if (where.username) query = query.ilike('username', where.username.trim());
+        else if (where.email) query = query.ilike('email', where.email.trim().toLowerCase());
+        else return null;
+
+        const { data, error } = await query.maybeSingle();
+        if (error || !data) return null;
+        return toCamelCase(data);
+      } catch (err) {
+        console.error('[SupabaseRepo] adminAccount.findUnique error:', err);
+        return null;
+      }
+    },
+
+    findFirst: async ({ where }: { where?: any } = {}) => {
+      try {
+        let query = supabase.from('admin_accounts').select('*');
+        if (where?.id) query = query.eq('id', where.id);
+        if (where?.username) query = query.ilike('username', where.username.trim());
+        if (where?.email) query = query.ilike('email', where.email.trim().toLowerCase());
+        const { data, error } = await query.limit(1).maybeSingle();
+        if (error || !data) return null;
+        return toCamelCase(data);
+      } catch (err) {
+        console.error('[SupabaseRepo] adminAccount.findFirst error:', err);
+        return null;
+      }
+    },
+
+    update: async ({ where, data }: { where: { id?: string; username?: string }; data: any }) => {
+      try {
+        let query = supabase.from('admin_accounts').update(toSnakeCase(data));
+        if (where.id) query = query.eq('id', where.id);
+        else if (where.username) query = query.eq('username', where.username);
+        const { data: updated, error } = await query.select('*').single();
+        if (error || !updated) throw error;
+        return toCamelCase(updated);
+      } catch (err) {
+        console.error('[SupabaseRepo] adminAccount.update error:', err);
+        throw err;
+      }
+    },
+  },
 };

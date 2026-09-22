@@ -31,6 +31,12 @@ export const config = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
 
+  // Dedicated High-Security Admin JWT (completely isolated from student tokens)
+  adminJwt: {
+    secret: process.env.ADMIN_JWT_SECRET || 'studysync-master-admin-secure-vault-key-2026-isolated',
+    expiresIn: process.env.ADMIN_JWT_EXPIRES_IN || '12h',
+  },
+
   // Google OAuth
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',

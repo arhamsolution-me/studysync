@@ -228,21 +228,58 @@ export const whatsappApi = {
     api.post('/whatsapp/send-test', { phoneNumber, message }),
 };
 
-// ─── Admin Portal API ──────────────────────────────────────────────────
+// ─── Admin Client & API (Isolated from Student Session) ─────────────────
+
+const adminClient = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const getAdminToken = (): string | null => {
+  return typeof window !== 'undefined' ? localStorage.getItem('studysync_admin_token') : null;
+};
+
+export const setAdminToken = (token: string | null) => {
+  if (token) {
+    localStorage.setItem('studysync_admin_token', token);
+    adminClient.defaults.headers.common['x-admin-token'] = token;
+    adminClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    localStorage.removeItem('studysync_admin_token');
+    delete adminClient.defaults.headers.common['x-admin-token'];
+    delete adminClient.defaults.headers.common['Authorization'];
+  }
+};
+
+// Initialize stored admin token
+const initialAdminToken = getAdminToken();
+if (initialAdminToken) {
+  adminClient.defaults.headers.common['x-admin-token'] = initialAdminToken;
+  adminClient.defaults.headers.common['Authorization'] = `Bearer ${initialAdminToken}`;
+}
 
 export const adminApi = {
-  getOverview: () => api.get('/admin/overview'),
+  login: (data: { identifier: string; password: string; securityPassphrase?: string }) =>
+    adminClient.post('/admin/auth/login', data),
+  me: () => adminClient.get('/admin/auth/me'),
+  logout: () => adminClient.post('/admin/auth/logout'),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    adminClient.post('/admin/auth/change-password', data),
+  getOverview: () => adminClient.get('/admin/overview'),
   getUsers: (params?: { search?: string; plan?: string; status?: string; page?: number; limit?: number }) =>
-    api.get('/admin/users', { params }),
+    adminClient.get('/admin/users', { params }),
   updateUserPlan: (userId: string, plan: 'free' | 'pro' | 'campus') =>
-    api.patch(`/admin/users/${userId}/plan`, { plan }),
+    adminClient.patch(`/admin/users/${userId}/plan`, { plan }),
   updateUserStatus: (userId: string, isBlocked: boolean) =>
-    api.patch(`/admin/users/${userId}/status`, { isBlocked }),
+    adminClient.patch(`/admin/users/${userId}/status`, { isBlocked }),
   getCourses: (params?: { search?: string; status?: string; page?: number; limit?: number }) =>
-    api.get('/admin/courses', { params }),
+    adminClient.get('/admin/courses', { params }),
   updateCourseStatus: (courseId: string, isBlocked: boolean) =>
-    api.patch(`/admin/courses/${courseId}/status`, { isBlocked }),
-  getAiUsage: () => api.get('/admin/ai-usage'),
+    adminClient.patch(`/admin/courses/${courseId}/status`, { isBlocked }),
+  getAiUsage: () => adminClient.get('/admin/ai-usage'),
 };
 
 export default api;
