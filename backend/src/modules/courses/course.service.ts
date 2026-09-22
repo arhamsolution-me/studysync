@@ -10,9 +10,10 @@ import { scheduleTaskReminders } from '../notifications/notification.queue';
 import { deeplyCalculateAcademicDeadline } from '../../utils/systemDateTime';
 import { cleanMojibake, repairChunkMathDelimiters } from '../../utils/textSanitizer';
 
-const CHAT_HISTORIES_DIR = path.resolve(process.cwd(), 'chat_histories');
-const ROOT_CHAT_HISTORIES_DIR = path.resolve(process.cwd(), '../chat_histories');
-const LEGACY_CHAT_HISTORY_FILE = path.resolve(process.cwd(), 'course_chat_histories.json');
+const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+const CHAT_HISTORIES_DIR = path.resolve(baseDir, 'chat_histories');
+const ROOT_CHAT_HISTORIES_DIR = path.resolve(baseDir, 'root_chat_histories');
+const LEGACY_CHAT_HISTORY_FILE = path.resolve(baseDir, 'course_chat_histories.json');
 
 export interface CreateCourseInput {
   name: string;
@@ -68,7 +69,7 @@ class CourseService {
   private loadHistoriesFromDisk(): void {
     try {
       if (!fs.existsSync(CHAT_HISTORIES_DIR)) {
-        fs.mkdirSync(CHAT_HISTORIES_DIR, { recursive: true });
+        try { fs.mkdirSync(CHAT_HISTORIES_DIR, { recursive: true }); } catch {}
       }
 
       // 1. Read all independent course history files from chat_histories/
@@ -124,7 +125,7 @@ class CourseService {
   public saveCourseHistoryToDisk(courseId: string, messages?: ChatMessage[]): void {
     try {
       if (!fs.existsSync(CHAT_HISTORIES_DIR)) {
-        fs.mkdirSync(CHAT_HISTORIES_DIR, { recursive: true });
+        try { fs.mkdirSync(CHAT_HISTORIES_DIR, { recursive: true }); } catch {}
       }
 
       const msgs = messages || this.chatHistories.get(courseId) || [];

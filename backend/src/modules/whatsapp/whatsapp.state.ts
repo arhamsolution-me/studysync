@@ -11,7 +11,8 @@ export interface UserSession {
   lastActive: number;
 }
 
-const SESSIONS_FILE = path.resolve(process.cwd(), 'storage', 'whatsapp_sessions.json');
+const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+const SESSIONS_FILE = path.resolve(baseDir, 'storage', 'whatsapp_sessions.json');
 
 class WhatsAppStateManager {
   private sessions = new Map<string, UserSession>();
@@ -38,7 +39,7 @@ class WhatsAppStateManager {
     try {
       const dir = path.dirname(SESSIONS_FILE);
       if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        try { fs.mkdirSync(dir, { recursive: true }); } catch {}
       }
       const data = Array.from(this.sessions.values());
       fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');

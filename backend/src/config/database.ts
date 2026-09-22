@@ -10,7 +10,8 @@ import { testSupabaseConnection } from './supabase';
 
 testSupabaseConnection().catch(() => {});
 
-const SETTINGS_FILE = path.resolve(process.cwd(), 'user_settings.json');
+const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+const SETTINGS_FILE = path.resolve(baseDir, 'user_settings.json');
 
 export function loadUserSettings() {
   try {
@@ -38,10 +39,10 @@ export function saveUserSettings(settings: any) {
   }
 }
 
-const COURSES_FILE = path.resolve(process.cwd(), 'courses.json');
-const TASKS_FILE = path.resolve(process.cwd(), 'tasks.json');
-const KEYS_FILE = path.resolve(process.cwd(), 'user_api_keys.json');
-const SUBSCRIPTIONS_FILE = path.resolve(process.cwd(), 'subscriptions.json');
+const COURSES_FILE = path.resolve(baseDir, 'courses.json');
+const TASKS_FILE = path.resolve(baseDir, 'tasks.json');
+const KEYS_FILE = path.resolve(baseDir, 'user_api_keys.json');
+const SUBSCRIPTIONS_FILE = path.resolve(baseDir, 'subscriptions.json');
 
 function loadCoursesFromDisk(): Map<string, any> {
   const map = new Map<string, any>();

@@ -3,19 +3,24 @@ import path from 'path';
 import { exec } from 'child_process';
 
 // Base sandbox directory for student course workspaces
-const WORKSPACE_BASE_DIR = path.resolve(process.cwd(), 'backend', 'storage', 'workspaces');
+const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+const WORKSPACE_BASE_DIR = path.resolve(baseDir, 'storage', 'workspaces');
 
-// Ensure root workspace folder exists
-if (!fs.existsSync(WORKSPACE_BASE_DIR)) {
-  fs.mkdirSync(WORKSPACE_BASE_DIR, { recursive: true });
-}
+// Ensure root workspace folder exists safely
+try {
+  if (!fs.existsSync(WORKSPACE_BASE_DIR)) {
+    fs.mkdirSync(WORKSPACE_BASE_DIR, { recursive: true });
+  }
+} catch {}
 
 export function getCourseWorkspaceDir(courseId: string): string {
   const safeCourseId = courseId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const dir = path.join(WORKSPACE_BASE_DIR, safeCourseId);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {}
   return dir;
 }
 

@@ -2,18 +2,23 @@ import fs from 'fs';
 import path from 'path';
 
 // Base persistent memory directory
-const MEMORY_BASE_DIR = path.resolve(process.cwd(), 'backend', 'storage', 'memory');
+const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+const MEMORY_BASE_DIR = path.resolve(baseDir, 'storage', 'memory');
 
-if (!fs.existsSync(MEMORY_BASE_DIR)) {
-  fs.mkdirSync(MEMORY_BASE_DIR, { recursive: true });
-}
+try {
+  if (!fs.existsSync(MEMORY_BASE_DIR)) {
+    fs.mkdirSync(MEMORY_BASE_DIR, { recursive: true });
+  }
+} catch {}
 
 export function getCourseMemoryDir(courseId: string): string {
   const safeId = courseId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const dir = path.join(MEMORY_BASE_DIR, safeId);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch {}
   return dir;
 }
 

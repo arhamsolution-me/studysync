@@ -28,10 +28,13 @@ export class WhatsAppQueue {
   private isConnectedChecker: IsConnectedChecker | null = null;
 
   constructor() {
-    const storageDir = path.resolve(process.cwd(), 'storage');
-    if (!fs.existsSync(storageDir)) {
-      fs.mkdirSync(storageDir, { recursive: true });
-    }
+    const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+    const storageDir = path.resolve(baseDir, 'storage');
+    try {
+      if (!fs.existsSync(storageDir)) {
+        fs.mkdirSync(storageDir, { recursive: true });
+      }
+    } catch {}
     this.queueFilePath = path.join(storageDir, 'whatsapp_outbound_queue.json');
     this.processedIdsFilePath = path.join(storageDir, 'whatsapp_processed_ids.json');
 

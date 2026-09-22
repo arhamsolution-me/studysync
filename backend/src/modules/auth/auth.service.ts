@@ -1,4 +1,4 @@
-import argon2 from 'argon2';
+import { hashPassword, verifyPassword } from '../../utils/hasher';
 import jwt from 'jsonwebtoken';
 import prisma, { loadUserSettings } from '../../config/database';
 import { config } from '../../config';
@@ -41,12 +41,7 @@ class AuthService {
     }
 
     // Hash password with Argon2id
-    const passwordHash = await argon2.hash(input.password, {
-      type: argon2.argon2id,
-      memoryCost: 65536,
-      timeCost: 3,
-      parallelism: 4,
-    });
+    const passwordHash = await hashPassword(input.password);
 
     // Generate 6-digit verification OTP (15 min validity)
     const otpCode = generate6DigitOtp();
@@ -196,7 +191,7 @@ class AuthService {
     }
 
     // Verify password
-    const valid = await argon2.verify(user.passwordHash, input.password);
+    const valid = await verifyPassword(user.passwordHash, input.password);
     if (!valid) {
       throw Object.assign(
         new Error('Invalid email or password.'),
@@ -283,12 +278,7 @@ class AuthService {
       });
     }
 
-    const passwordHash = await argon2.hash(newPassword, {
-      type: argon2.argon2id,
-      memoryCost: 65536,
-      timeCost: 3,
-      parallelism: 4,
-    });
+    const passwordHash = await hashPassword(newPassword);
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -339,7 +329,7 @@ class AuthService {
       }
 
       // Verify stored token matches (detect reuse of old tokens)
-      const storedTokenValid = await argon2.verify(user.refreshToken, refreshToken);
+      const storedTokenValid = await verifyPassword(user.refreshToken, refreshToken);
       if (!storedTokenValid) {
         // Possible token theft — invalidate all sessions
         await prisma.user.update({
@@ -507,12 +497,7 @@ class AuthService {
 
   private async storeRefreshToken(userId: string, refreshToken: string) {
     // Store hash of refresh token (never store raw tokens in DB)
-    const tokenHash = await argon2.hash(refreshToken, {
-      type: argon2.argon2id,
-      memoryCost: 16384,
-      timeCost: 2,
-      parallelism: 1,
-    });
+    const tokenHash = await hashPassword(refreshToken);
 
     await prisma.user.update({
       where: { id: userId },

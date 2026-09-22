@@ -3,5 +3,8 @@
   "private": true,
   "scripts": {
     "build": "cd frontend && npm install && npm run build"
+  },
+  "dependencies": {
+    "hash-wasm": "^4.12.0"
   }
 }

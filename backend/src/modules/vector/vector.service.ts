@@ -48,7 +48,9 @@ class FaissVectorStore {
       } catch {}
     }
 
-    this.initialize();
+    if (!process.env.VERCEL) {
+      this.initialize();
+    }
   }
 
   /**

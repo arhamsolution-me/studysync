@@ -1,9 +1,12 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-  WASocket,
-  downloadMediaMessage,
-} from '@whiskeysockets/baileys';
+type WASocket = any;
+
+let baileysModulePromise: Promise<any> | null = null;
+async function getBaileys(): Promise<any> {
+  if (!baileysModulePromise) {
+    baileysModulePromise = import('@whiskeysockets/baileys');
+  }
+  return baileysModulePromise;
+}
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
 import qrcodeTerminal from 'qrcode-terminal';
@@ -32,10 +35,13 @@ export class WhatsAppService {
   private sentMessageIds = new Set<string>();
 
   constructor() {
-    this.authDir = path.resolve(process.cwd(), 'storage', 'whatsapp_auth');
-    if (!fs.existsSync(this.authDir)) {
-      fs.mkdirSync(this.authDir, { recursive: true });
-    }
+    const baseDir = process.env.VERCEL ? '/tmp' : process.cwd();
+    this.authDir = path.resolve(baseDir, 'storage', 'whatsapp_auth');
+    try {
+      if (!fs.existsSync(this.authDir)) {
+        fs.mkdirSync(this.authDir, { recursive: true });
+      }
+    } catch {}
   }
 
   public saveMessageToStore(id: string, message: any) {
@@ -51,6 +57,10 @@ export class WhatsAppService {
    * Auto-reconnects using saved credentials if available.
    */
   async init(): Promise<void> {
+    if (process.env.VERCEL) {
+      return;
+    }
+
     if (this.sock && (this.isConnected || this.isConnecting)) {
       return;
     }
@@ -60,6 +70,9 @@ export class WhatsAppService {
 
     try {
       console.log('[WhatsApp] 🔄 Initializing StudySync WhatsApp Agent Service...');
+      const baileys = await getBaileys();
+      const makeWASocket = baileys.default || baileys.makeWASocket || baileys;
+      const { useMultiFileAuthState, DisconnectReason } = baileys;
       const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
 
       if (state.creds?.me) {
@@ -79,7 +92,7 @@ export class WhatsAppService {
         connectTimeoutMs: 60000,
         keepAliveIntervalMs: 25000,
         syncFullHistory: false,
-        getMessage: async (key) => {
+        getMessage: async (key: any) => {
           if (key.id) {
             const cached = this.messageStore.get(key.id);
             if (cached) return cached;
@@ -92,7 +105,7 @@ export class WhatsAppService {
       this.sock.ev.on('creds.update', saveCreds);
 
       // Handle connection updates (QR code, open, close)
-      this.sock.ev.on('connection.update', async (update) => {
+      this.sock.ev.on('connection.update', async (update: any) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -165,7 +178,7 @@ export class WhatsAppService {
       });
 
       // Handle incoming messages
-      this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
+      this.sock.ev.on('messages.upsert', async ({ messages, type }: { messages: any[]; type: any }) => {
         if (!this.sock) return;
 
         const incomingToProcess: any[] = [];
@@ -312,7 +325,9 @@ export class WhatsAppService {
     try {
       if (fs.existsSync(this.authDir)) {
         fs.rmSync(this.authDir, { recursive: true, force: true });
-        fs.mkdirSync(this.authDir, { recursive: true });
+        try {
+          fs.mkdirSync(this.authDir, { recursive: true });
+        } catch {}
       }
     } catch (err: any) {
       console.error('[WhatsApp] Error clearing auth folder:', err.message);
@@ -330,6 +345,7 @@ export class WhatsAppService {
   async downloadMedia(msg: any): Promise<Buffer | null> {
     try {
       if (!this.sock) return null;
+      const { downloadMediaMessage } = await getBaileys();
       const buffer = await downloadMediaMessage(
         msg,
         'buffer',
