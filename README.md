@@ -31,6 +31,12 @@
 
 ---
 
+## 🚀 1-Click Cloud Deployment (Backend)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/arhamsolution-me/studysync)
+
+---
+
 ## 🚀 Quick Start Guide
 
 ### Prerequisites
