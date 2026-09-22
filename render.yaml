@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: studysync-backend
+    env: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://studysync-tan.vercel.app
