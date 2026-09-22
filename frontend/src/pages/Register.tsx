@@ -101,6 +101,7 @@ export default function Register() {
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. Ali Ahmed"
                     className="ss-auth-input"
+                    autoComplete="name"
                   />
                 </div>
               </div>
@@ -119,6 +120,7 @@ export default function Register() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="student@university.edu"
                     className="ss-auth-input"
+                    autoComplete="email"
                   />
                 </div>
                 <div style={{ fontSize: '0.6875rem', color: '#94A3B8', marginTop: '4px' }}>
@@ -141,6 +143,7 @@ export default function Register() {
                     placeholder="At least 8 characters"
                     className="ss-auth-input"
                     style={{ paddingRight: '42px' }}
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"

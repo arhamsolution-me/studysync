@@ -153,6 +153,7 @@ export default function Login({ onLogin }: LoginProps) {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="student@university.edu"
                     className="ss-auth-input"
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -177,6 +178,7 @@ export default function Login({ onLogin }: LoginProps) {
                     placeholder="••••••••"
                     className="ss-auth-input"
                     style={{ paddingRight: '42px' }}
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
