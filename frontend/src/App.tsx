@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useState, useEffect } from 'react';
-import { authApi, setAuthToken } from './services/api';
+import { authApi, setAuthToken, getAuthToken } from './services/api';
 
-// Main Workspace Pages
+// Pages
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Calendar from './pages/Calendar';
 import Courses from './pages/Courses';
 import Chatbot from './pages/Chatbot';
 import Settings from './pages/Settings';
@@ -27,22 +29,9 @@ export interface User {
   activeByokProvider?: string;
 }
 
-const DEFAULT_STUDENT_USER: User = {
-  id: 'personal-user',
-  fullName: 'Personal Student',
-  email: 'student@studysync.local',
-  role: 'student',
-  isOnboarded: true,
-  plan: 'pro',
-  university: 'University of Management and Technology',
-  major: 'Software Engineering',
-  semester: '6th Semester',
-  aiProviderPreference: 'system',
-};
-
 function App() {
-  const [user, setUser] = useState<User>(DEFAULT_STUDENT_USER);
-  const [, setAuthChecking] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
   useEffect(() => {
@@ -50,13 +39,24 @@ function App() {
   }, []);
 
   const checkAuth = async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setUser(null);
+      setAuthChecking(false);
+      return;
+    }
+
     try {
       const { data } = await authApi.me();
       if (data.data?.user) {
         setUser(data.data.user);
+      } else {
+        setUser(null);
+        setAuthToken(null);
       }
     } catch {
-      // Keep DEFAULT_STUDENT_USER fallback seamlessly
+      setUser(null);
+      setAuthToken(null);
     } finally {
       setAuthChecking(false);
     }
@@ -67,7 +67,30 @@ function App() {
       await authApi.logout();
     } catch {}
     setAuthToken(null);
+    setUser(null);
   };
+
+  if (authChecking) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0F172A',
+        color: '#94A3B8',
+      }}>
+        <div style={{
+          width: '36px',
+          height: '36px',
+          border: '3px solid rgba(99,102,241,0.2)',
+          borderTopColor: '#6366F1',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+        }} />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -91,27 +114,43 @@ function App() {
         />
 
         <Routes>
-          {/* Main Area: Dashboard, Courses, Chatbot, Settings */}
-          <Route element={<Layout user={user} onLogout={handleLogout} />}>
-            <Route path="/" element={<Dashboard user={user} />} />
-            <Route path="/dashboard" element={<Dashboard user={user} />} />
-            <Route path="/courses" element={<Courses />} />
-            <Route path="/my-courses" element={<Courses />} />
-            <Route path="/chatbot" element={<Chatbot />} />
-            <Route
-              path="/settings"
-              element={
-                <Settings
-                  user={user}
-                  onUpdateUser={(updated) => setUser((prev) => ({ ...prev, ...updated }))}
-                  onLogout={handleLogout}
-                />
-              }
-            />
-          </Route>
+          {/* Public Login Route */}
+          <Route
+            path="/login"
+            element={
+              user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Login onLogin={(u) => setUser(u)} />
+              )
+            }
+          />
 
-          {/* Any unknown route directly routes to dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Authenticated Workspace Routes */}
+          {user ? (
+            <Route element={<Layout user={user} onLogout={handleLogout} />}>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard user={user} />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/courses" element={<Courses />} />
+              <Route path="/my-courses" element={<Courses />} />
+              <Route path="/chatbot" element={<Chatbot />} />
+              <Route
+                path="/settings"
+                element={
+                  <Settings
+                    user={user}
+                    onUpdateUser={(updated) => setUser((prev) => (prev ? { ...prev, ...updated } : null))}
+                    onLogout={handleLogout}
+                  />
+                }
+              />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Route>
+          ) : (
+            /* Unauthenticated fallback redirects to /login */
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          )}
         </Routes>
       </BrowserRouter>
     </>

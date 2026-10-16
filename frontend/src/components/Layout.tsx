@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  CalendarDays,
   GraduationCap,
   Bot,
   Settings,
+  LogOut,
   Menu,
   X,
   Sparkles,
@@ -59,7 +61,7 @@ const getPlanBadge = (plan?: string) => {
   };
 };
 
-export default function Layout({ user }: LayoutProps) {
+export default function Layout({ user, onLogout }: LayoutProps) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -129,13 +131,24 @@ export default function Layout({ user }: LayoutProps) {
             <div className="sidebar-nav-label">Workspace</div>
             <NavLink
               to="/dashboard"
-              className={({ isActive }) => `sidebar-nav-item ${isActive || location.pathname === '/' ? 'active' : ''}`}
+              className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
               title="Dashboard"
             >
               <div className="sidebar-nav-icon-wrap">
                 <LayoutDashboard size={19} />
               </div>
               <span className="sidebar-nav-title">Dashboard</span>
+            </NavLink>
+
+            <NavLink
+              to="/calendar"
+              className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+              title="Calendar"
+            >
+              <div className="sidebar-nav-icon-wrap">
+                <CalendarDays size={19} />
+              </div>
+              <span className="sidebar-nav-title">Calendar</span>
             </NavLink>
 
             <NavLink
@@ -206,6 +219,17 @@ export default function Layout({ user }: LayoutProps) {
                   </div>
                 </div>
               </NavLink>
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="sidebar-profile-logout-btn"
+                  title="Sign Out"
+                  aria-label="Sign Out"
+                >
+                  <LogOut size={16} />
+                </button>
+              )}
             </div>
           </div>
         </nav>
