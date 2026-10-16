@@ -50,13 +50,34 @@ function App() {
       const { data } = await authApi.me();
       if (data.data?.user) {
         setUser(data.data.user);
+        localStorage.setItem('auth_user', JSON.stringify(data.data.user));
+      } else {
+        const cached = localStorage.getItem('auth_user');
+        if (cached) {
+          try {
+            setUser(JSON.parse(cached));
+          } catch {
+            setUser(null);
+            setAuthToken(null);
+          }
+        } else {
+          setUser(null);
+          setAuthToken(null);
+        }
+      }
+    } catch {
+      const cached = localStorage.getItem('auth_user');
+      if (cached) {
+        try {
+          setUser(JSON.parse(cached));
+        } catch {
+          setUser(null);
+          setAuthToken(null);
+        }
       } else {
         setUser(null);
         setAuthToken(null);
       }
-    } catch {
-      setUser(null);
-      setAuthToken(null);
     } finally {
       setAuthChecking(false);
     }
@@ -67,6 +88,7 @@ function App() {
       await authApi.logout();
     } catch {}
     setAuthToken(null);
+    localStorage.removeItem('auth_user');
     setUser(null);
   };
 

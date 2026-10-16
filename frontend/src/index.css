@@ -10242,6 +10242,18 @@ svg.error-icon {
     0 4px 14px -2px rgba(15, 23, 42, 0.03),
     0 0 0 1px rgba(226, 232, 240, 0.6);
   overflow: hidden;
+  animation: ssBookOpenIn 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes ssBookOpenIn {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.97) rotateX(4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateX(0deg);
+  }
 }
 
 @media (max-width: 720px) {
