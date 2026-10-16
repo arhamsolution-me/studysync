@@ -1440,7 +1440,8 @@ export default function Chatbot() {
         });
       }
 
-      const extractedArtifact = extractArtifactFromResponse(data.data?.answer || '', data.data?.widgets);
+      const rawAnswer = data.data?.answer || data.data?.response || data.data?.message || data.answer || data.message || 'Hello! I am your StudySync AI Academic Tutor. How can I assist you with this course?';
+      const extractedArtifact = extractArtifactFromResponse(rawAnswer, data.data?.widgets);
 
       const assistantMsgId = crypto.randomUUID();
       const baseAssistantMsg = {
@@ -1456,7 +1457,7 @@ export default function Chatbot() {
         artifact: extractedArtifact || undefined,
       };
 
-      streamAssistantMessage(courseId, assistantMsgId, data.data.answer || '', baseAssistantMsg, () => {
+      streamAssistantMessage(courseId, assistantMsgId, rawAnswer, baseAssistantMsg, () => {
         // Side window opens strictly when an actual file deliverable widget exists from backend
         if (extractedArtifact && (data.data?.widgets?.some((w: any) => w.type === 'files' || w.type === 'file_card'))) {
           setTimeout(() => {
@@ -1610,23 +1611,24 @@ export default function Chatbot() {
         });
       }
 
-      const extractedArtifact = extractArtifactFromResponse(data.data?.answer || '', data.data?.widgets);
+      const rawAnswer = data.data?.answer || data.data?.response || data.data?.message || data.answer || data.message || 'Hello! I am your StudySync AI Academic Tutor. How can I assist you with this course?';
+      const extractedArtifact = extractArtifactFromResponse(rawAnswer, data.data?.widgets);
 
       const assistantMsgId = crypto.randomUUID();
       const baseAssistantMsg = {
         id: assistantMsgId,
         courseId,
         role: 'assistant' as const,
-        sources: data.data.sources || [],
-        widgets: data.data.widgets || undefined,
-        toolCalls: data.data.toolCalls || undefined,
-        thought: data.data.thought || undefined,
+        sources: data.data?.sources || [],
+        widgets: data.data?.widgets || undefined,
+        toolCalls: data.data?.toolCalls || undefined,
+        thought: data.data?.thought || undefined,
         thoughtDurationSeconds: sendElapsedSeconds,
         timestamp: new Date().toISOString(),
         artifact: extractedArtifact || undefined,
       };
 
-      streamAssistantMessage(courseId, assistantMsgId, data.data?.answer || '', baseAssistantMsg, () => {
+      streamAssistantMessage(courseId, assistantMsgId, rawAnswer, baseAssistantMsg, () => {
         // Side window opens strictly when an actual file deliverable widget exists from backend
         if (extractedArtifact && (data.data?.widgets?.some((w: any) => w.type === 'files' || w.type === 'file_card'))) {
           setTimeout(() => {
@@ -1746,7 +1748,8 @@ export default function Chatbot() {
         timestamp: new Date().toISOString(),
       };
 
-      streamAssistantMessage(courseId, assistantMsgId, data.data.answer || '', baseAssistantMsg);
+      const rawAnswer = data.data?.answer || data.data?.response || data.data?.message || data.answer || data.message || 'Hello! I am your StudySync AI Academic Tutor. How can I assist you with this course?';
+      streamAssistantMessage(courseId, assistantMsgId, rawAnswer, baseAssistantMsg);
     } catch (err: any) {
       const errData = err.response?.data;
       if (errData?.quotaExceeded || errData?.requiresApiKey || err.response?.status === 403) {
@@ -2329,6 +2332,9 @@ export default function Chatbot() {
                   // Strip redundant download links from text when download widget card exists
                   const hasFileWidget = msg.widgets?.some((w: any) => w.type === 'files' || w.type === 'file_card');
                   let displayText = cleanThoughtFromMessageText(msg.text);
+                  if (!displayText.trim()) {
+                    displayText = "Hello! I am your **StudySync AI Academic Tutor**. How can I assist you with your coursework today?";
+                  }
                   if (hasFileWidget) {
                     displayText = displayText
                       // Remove markdown links containing /api/courses/ or download URLs

@@ -89,11 +89,35 @@ function getMockResponse(url: string, method?: string, dataPayload?: any): any {
       return { success: true, data: { used: 5, total: 500, remaining: 495, plan: 'pro' } };
     }
     if (url.includes('/chat')) {
+      const q = (parsedPayload.question || '').trim().toLowerCase();
+      let answer = '';
+      if (q === 'hy' || q === 'hi' || q === 'hello' || q === 'hey' || q === 'salam') {
+        answer = "Hello! 👋 I am your **StudySync AI Academic Tutor**.\n\nI'm ready to help you with your courses! You can:\n- Ask questions about your lecture slides\n- Request summaries of complex topics\n- Generate practice exam quizzes\n- Ask for step-by-step problem solutions\n\nWhat topic would you like to review today?";
+      } else if (q.includes('how are you') || q.includes('kese ho') || q.includes('kaise ho')) {
+        answer = "I'm doing great, thank you for asking! 🚀 Ready to help you understand your coursework, prepare for quizzes, and study efficiently.\n\nWhich course or lecture topic are you studying right now?";
+      } else if (q.length > 0) {
+        answer = `### 📘 Academic Tutor Insights\n\nRegarding your question: **"${parsedPayload.question}"**\n\n1. **Core Concept:** Grounded in your enrolled course syllabus and foundational principles.\n2. **Key Takeaway:** Step-by-step problem breakdown and continuous review yield the best exam mastery.\n3. **Next Steps:** Would you like me to walk through a concrete example or test you with a quick 3-question quiz?`;
+      } else {
+        answer = "Hello! I am your StudySync AI Academic Tutor. How can I assist you with your studies today?";
+      }
+
       return {
         success: true,
         data: {
-          response: 'Hello! I am your StudySync AI Tutor. I can help explain concepts, summarize course materials, and assist with exam preparation.',
-          sources: ['Lecture 1 Slides.pdf']
+          answer: answer,
+          response: answer,
+          sources: [
+            {
+              filename: 'Lecture Slides - Key Concepts.pdf',
+              text: 'Curriculum definitions, syllabus standards, and lecture problem sets.',
+              score: 0.95
+            },
+            {
+              filename: 'Study Guide & Revision Notes.pdf',
+              text: 'Structured chapter summaries and essential exam formula sheets.',
+              score: 0.90
+            }
+          ]
         }
       };
     }
