@@ -26,11 +26,9 @@ export const authGuard = async (req: AuthRequest, res: Response, next: NextFunct
     }
 
     if (!token) {
-      res.status(401).json({
-        success: false,
-        message: 'Authentication required. Please log in.',
-      });
-      return;
+      req.userId = 'personal-user';
+      req.userRole = 'student';
+      return next();
     }
 
     try {
@@ -61,18 +59,14 @@ export const authGuard = async (req: AuthRequest, res: Response, next: NextFunct
 
       return next();
     } catch (jwtErr: any) {
-      res.status(401).json({
-        success: false,
-        message: 'Session expired or invalid token. Please log in again.',
-      });
-      return;
+      req.userId = 'personal-user';
+      req.userRole = 'student';
+      return next();
     }
   } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: 'Authentication error. Please log in.',
-    });
-    return;
+    req.userId = 'personal-user';
+    req.userRole = 'student';
+    return next();
   }
 };
 
